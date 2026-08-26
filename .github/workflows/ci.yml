@@ -9,18 +9,28 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11"]
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Install dependencies
+    - name: Install
       run: |
-        python -m pip install --upgrade pip
+        pip install --upgrade pip
         pip install -e .
         pip install pytest
-    - name: Run CPU tests
+    - name: Test imports
+      run: pytest tests/test_imports.py -v
+    - name: Test reference (CPU)
+      run: pytest tests/test_reference.py -v
+    - name: Test fallback dispatcher
       run: |
-        pytest tests/test_imports.py tests/test_reference.py -v
-    # Опционально: можно добавить запуск TPU-тестов, если есть раннер с TPU,
-    # но для обычного CI пропускаем.
+        python -c "
+        import jax
+        from atomic_ops import gdn2_forward_trainable, is_tpu_available
+        print('TPU available:', is_tpu_available())
+        q = jax.numpy.ones((2, 512, 4, 128))
+        k, v, w, b, g = [q.copy() for _ in range(5)]
+        out, h = gdn2_forward_trainable(q, k, v, w, b, g, 0.1)
+        assert out.shape == q.shape
+        print('CPU fallback OK')
