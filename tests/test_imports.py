@@ -1,12 +1,15 @@
-import pytest
-
 def test_imports():
-    """Проверяем, что все функции импортируются корректно."""
-    from gdn2_package import gdn2_pallas_forward_trainable, gdn2_pallas_forward
-    assert gdn2_pallas_forward_trainable is not None
-    assert gdn2_pallas_forward is not None
+    from atomic_ops import (
+        gdn2_forward_trainable,
+        gdn2_forward,
+        gdn2_pallas_forward_trainable,
+        gdn2_chunked_wy_reference,
+        KernelConfig,
+        is_tpu_available,
+        estimate_memory,
+    )
+    assert gdn2_forward_trainable is not None
 
 def test_version():
-    """Проверяем, что версия определена."""
-    import gdn2_package
-    assert hasattr(gdn2_package, "__version__")
+    import atomic_ops
+    assert hasattr(atomic_ops, "__version__")
