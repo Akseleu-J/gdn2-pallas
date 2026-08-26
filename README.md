@@ -1,12 +1,22 @@
-# ⚡ GDN-2 Pallas — High-Performance Gated DeltaNet-2 for TPU v5e
+# ⚡ Atomic Ops — Fused GDN-2 Kernels for TPU v5e
 
+[![PyPI](https://img.shields.io/pypi/v/gdn2-pallas)](https://pypi.org/project/gdn2-pallas/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![JAX](https://img.shields.io/badge/JAX-0.4.20+-green.svg)](https://github.com/google/jax)
 
-**GDN-2 Pallas** — это компактная, высокопроизводительная реализация **Gated DeltaNet-2** (GDN-2) на базе **Pallas** (JAX), оптимизированная для **TPU v5e**. Пакет включает полностью слитый (fused) backward на Pallas, что даёт ускорение **до 12x в forward** и **до 8.5x в backward** по сравнению с эталонной реализацией на `jax.associative_scan`.
+High-performance **Gated DeltaNet-2** (GDN-2) implementation in **JAX/Pallas**, optimized for **TPU v5e-8**.  
+Features a fully fused backward pass delivering **up to 16× end-to-end speedup** over `jax.associative_scan` baselines.
+**Fused Gated DeltaNet-2 kernels for TPU v5e**, ported from [NVlabs DeltaNet](https://github.com/NVlabs/Gated_DeltaNet2) Triton reference.
+&gt; **Heads-up:** Forward pass is currently ~1.6× slower than the pure-JAX WY reference on TPU (under investigation).  
+&gt; The win comes from the **fused backward** — real training steps are dominated by backward, hence the 16× overall gain.  
+&gt; A hybrid `JAX forward + Pallas backward` mode is planned for v0.3.0.
 
 ---
+
+## Install
+
+```bash
+pip install gdn2-pallas
 
 ## 🚀 Основные возможности
 
@@ -56,7 +66,7 @@ pip install -e .
 ```python
 import jax
 import jax.numpy as jnp
-from gdn2_package import gdn2_pallas_forward_trainable
+from atomic_ops import gdn2_pallas_forward_trainable
 
 # Создаём случайные тензоры: (batch, seq_len, heads, d_head)
 shape = (4, 2048, 6, 128)
@@ -72,7 +82,7 @@ scale = 0.1
 out, h_final = gdn2_pallas_forward_trainable(q, k, v, w, b, g, scale)
 
 # Только Forward (для инференса)
-from gdn2_package import gdn2_pallas_forward
+from atomic_ops import gdn2_pallas_forward
 out_inf, _ = gdn2_pallas_forward(q, k, v, w, b, g, scale)
 
 print(out.shape, h_final.shape)   # (4, 2048, 6, 128) (4, 6, 128, 128)
@@ -85,7 +95,7 @@ print(out.shape, h_final.shape)   # (4, 2048, 6, 128) (4, 6, 128, 128)
 Вы можете изменить глобальные константы, чтобы адаптировать производительность под свой бюджет памяти или размер головы.
 
 ```python
-from gdn2_package import gdn2_utils   # если вы решите вынести константы в отдельный модуль
+from atomic_ops import gdn2_utils   # если вы решите вынести константы в отдельный модуль
 # (пока константы определены внутри gdn2_fwd, их можно переопределить)
 import gdn2_package.gdn2_fwd as fwd
 fwd.BT = 128   # уменьшить размер чанка, если не хватает памяти
