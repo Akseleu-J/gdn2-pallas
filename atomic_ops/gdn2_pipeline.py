@@ -27,12 +27,6 @@ from .gdn2_bwd import (
 _HIGHEST = jax.lax.Precision.HIGHEST
 _FINAL_CLIP = 1e4
 
-def _is_tpu_available():
-    try:
-        jax.devices('tpu')
-        return True
-    except:
-        return False
         
 def _final_sanitize(x):
     return jnp.nan_to_num(
@@ -178,12 +172,8 @@ _gdn2_core.defvjp(_gdn2_core_fwd_v2, _gdn2_core_bwd_v2)
 
 
 def gdn2_pallas_forward_trainable(q, k, v, w, b, g, scale, h0=None):
-    if not _is_tpu_available():
-        # CPU/GPU fallback — используем чистый JAX эталон
-        return gdn2_chunked_wy_reference(q, k, v, g, b, w, scale, chunk_size=256, h0=h0)
-    else:
-        bsz, L, H, D = q.shape
-        if h0 is None:
-            h0 = jnp.zeros((bsz, H, D, D), dtype=jnp.float32)
-        validate_inputs(q, k, v, w, b, g, scale, h0, config)
-        return _gdn2_core(q, k, v, w, b, g, scale, config, h0)
+    bsz, L, H, D = q.shape
+    if h0 is None:
+        h0 = jnp.zeros((bsz, H, D, D), dtype=jnp.float32)
+    validate_inputs(q, k, v, w, b, g, scale, h0, config)
+    return _gdn2_core(q, k, v, w, b, g, scale, config, h0)
