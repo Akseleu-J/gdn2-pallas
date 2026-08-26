@@ -42,9 +42,9 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
-from atomic_ops.kernel_trainable_B6 import gdn2_pallas_forward_trainable
-from atomic_ops.gdn2_wy_reference import gdn2_chunked_wy_reference
-from atomic_ops.kernel_a_scores import BT as PALLAS_BT
+from atomic_ops.gdn2_bwd import gdn2_pallas_forward_trainable
+from atomic_ops.gdn2_fwd import gdn2_chunked_wy_reference
+from atomic_ops.gdn2_fwd import BT as PALLAS_BT
 
 
 # ============================================================
