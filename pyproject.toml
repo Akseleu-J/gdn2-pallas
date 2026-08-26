@@ -4,19 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gdn2-pallas"
-version = "0.1.0"
-description = "Gated DeltaNet-2 with fused Pallas kernels, optimized for TPU v5e"
+version = "0.2.0"
+description = "Fused Gated DeltaNet-2 kernels for TPU v5e (Pallas/JAX)"
 readme = "README.md"
-authors = [{name = "Akseleu Omirbay", email = "your-email@example.com"}]
-license = {text = "MIT"}
-classifiers = [
-    "Programming Language :: Python :: 3.10",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
-]
+requires-python = ">=3.10"
 dependencies = [
     "jax>=0.4.20",
     "jaxlib>=0.4.20",
     "numpy>=1.24",
 ]
-requires-python = ">=3.10"
+
+[project.urls]
+Homepage = "https://github.com/Akseleu-J/gdn2-pallas"
