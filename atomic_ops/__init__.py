@@ -1,26 +1,28 @@
 """
-GDN-2 Pallas — production-ready Gated DeltaNet-2 kernels for TPU.
+Atomic Ops — Fused Gated DeltaNet-2 kernels for TPU v5e (Pallas/JAX).
+Ported from NVlabs DeltaNet Triton kernels.
 """
-from __future__ import annotations
-
-from .config import KernelConfig, sanitize, sanitize_h0, validate_inputs
-from .gdn2_fwd import gdn2_pallas_forward, gdn2_pallas_forward_with_residuals
+from .configs import KernelConfig, KAGGLE_SMALL, KAGGLE_MEDIUM, KAGGLE_LARGE
+from .utils import is_tpu_available, estimate_memory, get_recommended_config
+from .fallback import gdn2_forward, gdn2_forward_trainable
+from .gdn2_fwd import gdn2_pallas_forward
 from .gdn2_pipeline import gdn2_pallas_forward_trainable
-from .reference import (
-    gdn2_token_serial_reference,
-    gdn2_chunked_wy_reference,
-)
+from .reference import gdn2_chunked_wy_reference, gdn2_token_serial_reference
 
 __version__ = "0.2.0"
 
 __all__ = [
     "KernelConfig",
-    "sanitize",
-    "sanitize_h0",
-    "validate_inputs",
+    "KAGGLE_SMALL",
+    "KAGGLE_MEDIUM",
+    "KAGGLE_LARGE",
+    "is_tpu_available",
+    "estimate_memory",
+    "get_recommended_config",
+    "gdn2_forward",
+    "gdn2_forward_trainable",
     "gdn2_pallas_forward",
-    "gdn2_pallas_forward_with_residuals",
     "gdn2_pallas_forward_trainable",
-    "gdn2_token_serial_reference",
     "gdn2_chunked_wy_reference",
+    "gdn2_token_serial_reference",
 ]
