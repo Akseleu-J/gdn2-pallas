@@ -20,6 +20,32 @@ jobs:
         python -m pip install --upgrade pip
         pip install build
 
+    - name: Sync package version with release tag
+      env:
+        RELEASE_TAG: ${{ github.event.release.tag_name }}
+      run: |
+        export RELEASE_VERSION="${RELEASE_TAG#v}"
+        python - <<'PY'
+        import os
+        import pathlib
+        import re
+
+        version = os.environ["RELEASE_VERSION"]
+        pyproject = pathlib.Path("pyproject.toml")
+        content = pyproject.read_text(encoding="utf-8")
+        updated, substitutions = re.subn(
+            r'^version\s*=\s*"[^"]+"$',
+            f'version = "{version}"',
+            content,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        if substitutions != 1:
+            raise SystemExit("Unable to locate project version in pyproject.toml")
+        pyproject.write_text(updated, encoding="utf-8")
+        print(f"Using package version: {version}")
+        PY
+
     - name: Build package
       run: python -m build
 
