@@ -8,7 +8,7 @@ import jax.numpy as jnp
 from jax.experimental import pallas as pl
 from jax.experimental.pallas import tpu as pltpu
 
-from .config import (
+from .configs import (
     KernelConfig, DEFAULT_CONFIG, sanitize, sanitize_h0,
     _stage_diag, validate_inputs,
 )
