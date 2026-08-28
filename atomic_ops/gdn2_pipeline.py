@@ -9,7 +9,7 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
-from .config import KernelConfig, DEFAULT_CONFIG, sanitize, validate_inputs
+from .configs import KernelConfig, DEFAULT_CONFIG, sanitize, validate_inputs
 from .gdn2_fwd import (
     gdn2_pallas_forward,
     gdn2_pallas_forward_with_residuals,
