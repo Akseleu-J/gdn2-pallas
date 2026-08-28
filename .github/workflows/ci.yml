@@ -23,6 +23,8 @@ jobs:
       run: pytest tests/test_imports.py -v
     - name: Test reference (CPU)
       run: pytest tests/test_reference.py -v
+    - name: Test configs (CPU)
+      run: pytest tests/test_configs.py -v
     - name: Test fallback dispatcher
       run: |
         python -c "
@@ -34,3 +36,7 @@ jobs:
         out, h = gdn2_forward_trainable(q, k, v, w, b, g, 0.1)
         assert out.shape == q.shape
         print('CPU fallback OK')
+    - name: Build wheel (smoke test)
+      run: |
+         pip install build
+         python -m build
