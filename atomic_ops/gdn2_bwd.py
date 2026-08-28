@@ -98,7 +98,7 @@ def dav_backward_pallas(Aqk, v_new, do, config: KernelConfig = DEFAULT_CONFIG):
 def _kernel_b3_body(q_ref, k_ref, b_ref, w_ref, v_ref, gc_ref, a_ref, akk_ref,
                      hpre_ref, vnew_ref, do_ref, dv_ref, dhnext_ref,
                      dq_ref, dk_ref, db_ref, dw_ref, dvraw_ref, dgc_ref, dakk_ref,
-                     *, scale: float, bt: int):
+                     *, scale: float, bt: int, wy_eps: float):
     q_c = q_ref[0, 0, 0].astype(jnp.float32)
     k_c = k_ref[0, 0, 0].astype(jnp.float32)
     b_c = b_ref[0, 0, 0].astype(jnp.float32)
@@ -144,6 +144,15 @@ def _kernel_b3_body(q_ref, k_ref, b_ref, w_ref, v_ref, gc_ref, a_ref, akk_ref,
     tmp = jnp.dot(dA_total, A.T, precision=_HIGHEST)
     tmp = sanitize(tmp)
     dAkk_raw = -jnp.dot(A.T, tmp, precision=_HIGHEST)
+    # FIX: chain rule through the (1-wy_eps) damping applied in the forward
+    # solve (gdn2_fwd.py's _block_solve / _kernel_b_body). A is really
+    # A = (I + (1-wy_eps)*Akk)^-1, not (I + Akk)^-1 -- so
+    # d(A)/d(Akk) = (1-wy_eps) * d(A)/d((1-wy_eps)*Akk). Skipping this
+    # factor silently biases dAkk (and everything downstream: dq/dk/db/dgc
+    # via B4) by a constant (1-wy_eps) multiplier. Small for the default
+    # wy_eps=1e-3, but wrong, and grows if a user raises wy_eps for a more
+    # ill-conditioned model.
+    dAkk_raw = dAkk_raw * (1.0 - wy_eps)
     dAkk = dAkk_raw * strict
 
     dk_from_kb = dkb_decayed * jnp.exp(gc) * b_c
@@ -190,7 +199,7 @@ def wy_dqkg_backward_pallas(q, k, b, w, v, gc, A, Akk, h_pre_all, v_new_all,
     h_spec = pl.BlockSpec((1, 1, 1, D, D), lambda i, h, c: (i, h, c, 0, 0))
 
     dq, dk, db, dw, dv_raw, dgc, dAkk = pl.pallas_call(
-        lambda *refs: _kernel_b3_body(*refs, scale=scale, bt=config.bt),
+        lambda *refs: _kernel_b3_body(*refs, scale=scale, bt=config.bt, wy_eps=config.wy_eps),
         grid=grid,
         in_specs=[io_spec, io_spec, io_spec, io_spec, io_spec, io_spec,
                    score_spec, score_spec, h_spec, io_spec, io_spec, io_spec, h_spec],
