@@ -2,6 +2,7 @@ import pytest
 import jax
 import jax.numpy as jnp
 from atomic_ops.reference import gdn2_chunked_wy_reference
+from atomic_ops import gdn2_pallas_forward_trainable, gdn2_pallas_forward
 def is_tpu_available():
     """Проверяем, доступен ли TPU."""
     try:
