@@ -2,7 +2,7 @@
 Atomic Ops — Fused Gated DeltaNet-2 kernels for TPU v5e (Pallas/JAX).
 Ported from NVlabs DeltaNet Triton kernels.
 """
-from .configs import KernelConfig, KAGGLE_SMALL, KAGGLE_MEDIUM, KAGGLE_LARGE, DEFAULD_CONFIG
+from .configs import KernelConfig, KAGGLE_SMALL, KAGGLE_MEDIUM, KAGGLE_LARGE, DEFAULT_CONFIG
 from .utils import is_tpu_available, estimate_memory, get_recommended_config
 from .fallback import gdn2_forward, gdn2_forward_trainable
 from .gdn2_fwd import gdn2_pallas_forward
