@@ -19,6 +19,7 @@ class KernelConfig:
     bc: int = 128
     mb: int = 16
     clip: float = 1e4
+    wy_eps: float = 1e-3   # NEW: Tikhonov damping for the WY solve (Kernel B)
 
     @property
     def n_sub(self) -> int:
@@ -33,11 +34,13 @@ class KernelConfig:
             raise ValueError(f"bt={self.bt} must be divisible by bc={self.bc}")
         if self.bc % self.mb != 0:
             raise ValueError(f"bc={self.bc} must be divisible by mb={self.mb}")
+        if not (0.0 <= self.wy_eps < 1.0):
+            raise ValueError(f"wy_eps={self.wy_eps} must be in [0, 1)")
 
 
-KAGGLE_SMALL = KernelConfig(bt=128, bc=64, mb=16, clip=1e4)
-KAGGLE_MEDIUM = KernelConfig(bt=256, bc=128, mb=16, clip=1e4)
-KAGGLE_LARGE = KernelConfig(bt=256, bc=128, mb=16, clip=5e3)
+KAGGLE_SMALL = KernelConfig(bt=128, bc=64, mb=16, clip=1e4, wy_eps=1e-3)
+KAGGLE_MEDIUM = KernelConfig(bt=256, bc=128, mb=16, clip=1e4, wy_eps=1e-3)
+KAGGLE_LARGE = KernelConfig(bt=256, bc=128, mb=16, clip=5e3, wy_eps=1e-3)
 DEFAULT_CONFIG = KAGGLE_MEDIUM
 
 
