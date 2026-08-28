@@ -144,7 +144,9 @@ def _gdn2_core_bwd(scale, config, residuals, cotangents):
 _gdn2_core.defvjp(_gdn2_core_fwd, _gdn2_core_bwd)
 
 
-def gdn2_pallas_forward_trainable(q, k, v, w, b, g, scale, h0=None):
+def gdn2_pallas_forward_trainable(
+    q, k, v, w, b, g, scale, h0=None, config: KernelConfig = DEFAULT_CONFIG
+):
     bsz, L, H, D = q.shape
     if h0 is None:
         h0 = jnp.zeros((bsz, H, D, D), dtype=jnp.float32)
