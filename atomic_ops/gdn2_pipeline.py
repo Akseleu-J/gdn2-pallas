@@ -46,46 +46,19 @@ def _gdn2_core(q, k, v, w, b, g, scale, config, h0):
     return gdn2_pallas_forward(q, k, v, w, b, g, scale, h0=h0, config=config)
 
 
+
 def _gdn2_core_fwd(q, k, v, w, b, g, scale, config, h0):
-    out, h_final, residuals = gdn2_pallas_forward_with_residuals(
-        q, k, v, w, b, g, scale, h0=h0, config=config
-    )
-    # residuals contain everything B1-B5 need — no recomputation in bwd
-    return (out, h_final), residuals
+     out, h_final, fwd_res = gdn2_pallas_forward_with_residuals(
+         q, k, v, w, b, g, scale, h0=h0, config=config
+     )
+     residuals = {
+         "q": q, "k": k, "v": v, "w": w, "b": b, "g": g, "h0": h0,
+         **fwd_res,
+     }
+     return (out, h_final), residuals
 
 
 def _gdn2_core_bwd(scale, config, residuals, cotangents):
-    # Unpack residuals from forward_with_residuals
-    Aqk = residuals["Aqk"]
-    Akk = residuals["Akk"]
-    A = residuals["A"]
-    h_pre_all = residuals["h_pre_all"]
-    v_new_all = residuals["v_new_all"]
-    w_pseudo = residuals["w_pseudo"]
-    u = residuals["u"]
-    kg = residuals["kg"]
-    qg = residuals["qg"]
-    gc_last = residuals["gc_last"]
-    q = residuals.get("q")  # not stored — we re-grab from closure? No, we need to store inputs.
-    # WAIT: custom_vjp residuals can only be what's returned from fwd.
-    # We need q,k,v,w,b,g,h0 in backward too. Let's store them explicitly.
-    # (Fixed below by including inputs in residuals dict)
-    pass  # see corrected version below
-
-
-# CORRECTED backward — inputs stored in residuals
-def _gdn2_core_fwd_v2(q, k, v, w, b, g, scale, config, h0):
-    out, h_final, fwd_res = gdn2_pallas_forward_with_residuals(
-        q, k, v, w, b, g, scale, h0=h0, config=config
-    )
-    residuals = {
-        "q": q, "k": k, "v": v, "w": w, "b": b, "g": g, "h0": h0,
-        **fwd_res,
-    }
-    return (out, h_final), residuals
-
-
-def _gdn2_core_bwd_v2(scale, config, residuals, cotangents):
     q = residuals["q"]
     k = residuals["k"]
     v = residuals["v"]
@@ -168,7 +141,7 @@ def _gdn2_core_bwd_v2(scale, config, residuals, cotangents):
 
 
 # Register corrected VJP
-_gdn2_core.defvjp(_gdn2_core_fwd_v2, _gdn2_core_bwd_v2)
+_gdn2_core.defvjp(_gdn2_core_fwd, _gdn2_core_bwd)
 
 
 def gdn2_pallas_forward_trainable(q, k, v, w, b, g, scale, h0=None):
