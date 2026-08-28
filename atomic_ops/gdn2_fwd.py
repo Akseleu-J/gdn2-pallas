@@ -105,8 +105,17 @@ def build_chunk_scores_pallas(q, k, b, g, scale, config: KernelConfig = DEFAULT_
 
 
 # ---------- Kernel B ----------
-def _micro_forward_substitution(T_mb, mb: int):
+def _micro_forward_substitution(T_mb, mb: int, eps: float):
     idx = jnp.arange(mb)
+    # FIX: damp T before the recurrence, not after. Damping the strictly
+    # lower-triangular block by (1-eps) bounds the spectral radius of the
+    # implied Neumann series strictly below 1, so forward substitution
+    # cannot blow up regardless of how close the un-damped Akk is to
+    # singular. This changes WHAT is being solved by O(eps), not just
+    # how the result is post-processed -- clipping after the fact (as
+    # before) let already-corrupted large values propagate through the
+    # recurrence's later steps via `contrib`.
+    T_mb = T_mb * (1.0 - eps)
 
     def body(i, A):
         onehot_i = (idx == i).astype(jnp.float32)
@@ -125,19 +134,24 @@ def _micro_forward_substitution(T_mb, mb: int):
 def _block_solve(T_full, config: KernelConfig):
     N_MICRO = config.n_micro
     MB = config.mb
+    eps = config.wy_eps
     blocks = [[None] * N_MICRO for _ in range(N_MICRO)]
 
     for m in range(N_MICRO):
         T_mm = T_full[m * MB:(m + 1) * MB, m * MB:(m + 1) * MB]
-        A_mm = sanitize(_micro_forward_substitution(T_mm, MB))
+        A_mm = sanitize(_micro_forward_substitution(T_mm, MB, eps))
         blocks[m][m] = A_mm
 
         for n in range(m - 1, -1, -1):
             acc = jnp.zeros((MB, MB), dtype=jnp.float32)
             for k in range(n, m):
                 T_mk = T_full[m * MB:(m + 1) * MB, k * MB:(k + 1) * MB]
+                # FIX: damp off-diagonal coupling blocks too -- same (1-eps)
+                # factor, so the whole solve is consistently damping the
+                # same effective matrix (1-eps)*Akk everywhere, not just
+                # inside the MBxMB diagonal micro-blocks.
                 A_kn = blocks[k][n]
-                contrib = jnp.dot(T_mk, A_kn, precision=_HIGHEST)
+                contrib = jnp.dot(T_mk * (1.0 - eps), A_kn, precision=_HIGHEST)
                 acc = sanitize(acc + contrib)
             A_mn = -jnp.dot(A_mm, acc, precision=_HIGHEST)
             A_mn = sanitize(A_mn)
@@ -164,7 +178,10 @@ def _kernel_b_body(akk_ref, a_ref, *, bt: int, bc: int, config: KernelConfig):
     A00 = _block_solve(T00, config)
     A11 = _block_solve(T11, config)
 
-    tmp = jnp.dot(T10, A00, precision=_HIGHEST)
+    eps = config.wy_eps
+    # FIX: same (1-eps) damping on the top-level 2x2 coupling block T10,
+    # for consistency with the inner micro-block solve above.
+    tmp = jnp.dot(T10 * (1.0 - eps), A00, precision=_HIGHEST)
     tmp = sanitize(tmp)
     A10 = -jnp.dot(A11, tmp, precision=_HIGHEST)
     A10 = sanitize(A10)
