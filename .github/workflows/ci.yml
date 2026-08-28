@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11"]
+        python-version: ["3.10", "3.11", "3.12"]
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python
@@ -17,14 +17,13 @@ jobs:
     - name: Install
       run: |
         pip install --upgrade pip
-        pip install -e .
-        pip install pytest
+        pip install -e ".[dev]"
     - name: Test imports
       run: pytest tests/test_imports.py -v
-    - name: Test reference (CPU)
-      run: pytest tests/test_reference.py -v
     - name: Test configs (CPU)
       run: pytest tests/test_configs.py -v
+    - name: Test reference (CPU)
+      run: pytest tests/test_reference.py -v
     - name: Test fallback dispatcher
       run: |
         python -c "
@@ -39,5 +38,6 @@ jobs:
         "
     - name: Build wheel (smoke test)
       run: |
-         pip install build
-         python -m build
+        pip install build twine
+        python -m build
+        twine check dist/*
