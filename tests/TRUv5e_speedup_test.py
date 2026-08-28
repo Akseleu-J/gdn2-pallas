@@ -42,10 +42,10 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
-from atomic_ops.kernel_trainable_B6 import gdn2_forward_trainable
-from atomic_ops.gdn2_wy_reference import gdn2_chunked_wy_reference
-from atomic_ops.kernel_a_scores import BT as PALLAS_BT
-
+from atomic_ops.gdn2_pipeline import gdn2_pallas_forward_trainable
+from atomic_ops.reference import gdn2_chunked_wy_reference
+from atomic_ops.configs import DEFAULT_CONFIG
+PALLAS_BT = DEFAULT_CONFIG.bt
 
 # ============================================================
 # (OLD) verbatim associative_scan-based GDN-2 core, copied from the
