@@ -367,6 +367,14 @@ def gdn2_pallas_forward_with_residuals(q, k, v, w, b, g, scale, h0=None,
     o_chunks, h_final, h_pre_all, v_new_all = gdn2_inter_chunk_combine_with_state(
         Aqk, w_pseudo, u, kg, qg, gc_last, scale, h0=h0, config=config, debug_tag=debug_tag
     )
+    # FIX: gdn2_inter_chunk_combine_with_state возвращает h_pre_all/v_new_all
+    # в scan-нативной раскладке (n_chunks -- ведущая ось, axis=0), а не в
+    # (bsz, H, n_chunks, ...) как Aqk и остальные residuals. Backward-кернели
+    # (dav_backward_pallas, wy_dqkg_backward_pallas) ожидают вторую форму.
+    # Была в validated kernel_trainable_B6.py, потерялась при переносе сюда.
+    h_pre_all = jnp.moveaxis(h_pre_all, 0, 2)
+    v_new_all = jnp.moveaxis(v_new_all, 0, 2)
+
     o = _reshape_from_chunks(o_chunks, bsz, n_chunks, config.bt, H, D)
 
     residuals = {
