@@ -36,6 +36,7 @@ jobs:
         out, h = gdn2_forward_trainable(q, k, v, w, b, g, 0.1)
         assert out.shape == q.shape
         print('CPU fallback OK')
+        "
     - name: Build wheel (smoke test)
       run: |
          pip install build
