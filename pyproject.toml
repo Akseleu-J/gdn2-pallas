@@ -14,7 +14,7 @@ dependencies = [
     "numpy>=1.24",
 ]
 license = {text = "MIT"}
-authors = [{name = "Omirbay Akseleu", email = "omirbajakseleu5@gmail.com}]
+authors = [{name = "Omirbay Akseleu", email = "omirbajakseleu5@gmail.com"}]
 keywords = ["jax", "pallas", "tpu", "deltanet", "linear-attention", "gated-linear-attention"]
 classifiers = [
     "Programming Language :: Python :: 3.10",
