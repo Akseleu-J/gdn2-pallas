@@ -1,8 +1,7 @@
 import pytest
 import jax
 import jax.numpy as jnp
-from gdn2_package.reference import gdn2_chunked_wy_reference  # если есть
-
+from atomic_ops.reference import gdn2_chunked_wy_reference
 @pytest.mark.parametrize("batch, seq, heads, d_head", [(2, 512, 4, 128)])
 def test_reference_forward(batch, seq, heads, d_head):
     """Проверяем, что reference-функция работает и возвращает правильные формы."""
