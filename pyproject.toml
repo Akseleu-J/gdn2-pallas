@@ -14,8 +14,8 @@ dependencies = [
     "numpy>=1.24",
 ]
 license = {text = "MIT"}
-authors = [{name = "Omirbay Akseleu", email = "omirbajakseleu5@gmail.com"}]
-keywords = ["jax", "pallas", "tpu", "gated-deltanet2", "deltanet", "linear-attention", "gated-linear-attention"]
+authors = [{name = "Omirbay Akseleu", email = "omirbajakseleu5@gmail.com}]
+keywords = ["jax", "pallas", "tpu", "deltanet", "linear-attention", "gated-linear-attention"]
 classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -33,6 +33,7 @@ Issues = "https://github.com/Akseleu-J/gdn2-pallas/issues"
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "pytest-cov"]
+
 [tool.setuptools.packages.find]
 include = ["atomic_ops*"]
 exclude = ["tests*", "docs*"]
