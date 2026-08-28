@@ -183,7 +183,7 @@ def wy_solve_pallas(Akk, config: KernelConfig = DEFAULT_CONFIG):
         lambda *refs: _kernel_b_body(*refs, bt=config.bt, bc=config.bc, config=config),
         grid=grid,
         in_specs=[spec],
-        out_specs=[spec],
+        out_specs=spec,          # было: [spec]
         out_shape=jax.ShapeDtypeStruct(Akk.shape, jnp.float32),
         compiler_params=pltpu.CompilerParams(vmem_limit_bytes=96 * 1024 * 1024),
     )(Akk)
