@@ -34,7 +34,7 @@ def _weighted_pair_sum(a_i, edecay, b_j):
     return jnp.sum(tmp, axis=-1)
 
 
-def _kernel_a_body(q_ref, k_ref, b_ref, g_ref, aqk_ref, akk_ref, *, scale: float, bt: int, bc: int, n_sub: int):
+def _kernel_a_body(q_ref, k_ref, b_ref, g_ref, aqk_ref, akk_ref, *, scale: float, bt: int, bc: int, n_sub: int, use_centering: bool):
     q_full = q_ref[0, 0, 0].astype(jnp.float32)
     k_full = k_ref[0, 0, 0].astype(jnp.float32)
     b_full = b_ref[0, 0, 0].astype(jnp.float32)
@@ -46,6 +46,10 @@ def _kernel_a_body(q_ref, k_ref, b_ref, g_ref, aqk_ref, akk_ref, *, scale: float
 
     aqk_ref[0, 0, 0] = jnp.zeros((bt, bt), dtype=jnp.float32)
     akk_ref[0, 0, 0] = jnp.zeros((bt, bt), dtype=jnp.float32)
+
+    if use_centering:
+        n_mid = bt // 2
+        gn = gc[n_mid]   # (D,), shared reference point for the whole BT chunk
 
     for si in range(n_sub):
         for sj in range(si + 1):
@@ -59,12 +63,22 @@ def _kernel_a_body(q_ref, k_ref, b_ref, g_ref, aqk_ref, akk_ref, *, scale: float
             gc_i = gc[i0:i1]
             gc_j = gc[j0:j1]
 
-            decay_diff = gc_i[:, None, :] - gc_j[None, :, :]
-            edecay = jnp.exp(jnp.clip(decay_diff, -20.0, 20.0))
-
-            aqk_blk = scale * _weighted_pair_sum(q_i, edecay, k_j)
-            bk_i = b_i * k_i
-            akk_blk = _weighted_pair_sum(bk_i, edecay, k_j)
+            if use_centering:
+                gq_i = jnp.clip(gc_i - gn[None, :], -20.0, 20.0)
+                gk_j = jnp.clip(gn[None, :] - gc_j, -20.0, 20.0)
+                eq_i = jnp.exp(gq_i)
+                ek_j = jnp.exp(gk_j)
+                q_scaled = q_i * eq_i
+                k_scaled = k_j * ek_j
+                bk_scaled = (b_i * k_i) * eq_i
+                aqk_blk = scale * jnp.dot(q_scaled, k_scaled.T, precision=_HIGHEST)
+                akk_blk = jnp.dot(bk_scaled, k_scaled.T, precision=_HIGHEST)
+            else:
+                decay_diff = gc_i[:, None, :] - gc_j[None, :, :]
+                edecay = jnp.exp(jnp.clip(decay_diff, -20.0, 20.0))
+                aqk_blk = scale * _weighted_pair_sum(q_i, edecay, k_j)
+                bk_i = b_i * k_i
+                akk_blk = _weighted_pair_sum(bk_i, edecay, k_j)
 
             if si == sj:
                 idx = jnp.arange(bc)
@@ -77,7 +91,7 @@ def _kernel_a_body(q_ref, k_ref, b_ref, g_ref, aqk_ref, akk_ref, *, scale: float
             akk_ref[0, 0, 0, i0:i1, j0:j1] = sanitize(akk_blk)
 
 
-def build_chunk_scores_pallas(q, k, b, g, scale, config: KernelConfig = DEFAULT_CONFIG):
+def build_chunk_scores_pallas(q, k, b, g, scale, config: KernelConfig = DEFAULT_CONFIG, interpret: bool = False):
     bsz, L, H, D = q.shape
     n_chunks = L // config.bt
     q_r, k_r, b_r, g_r = map(
@@ -90,7 +104,8 @@ def build_chunk_scores_pallas(q, k, b, g, scale, config: KernelConfig = DEFAULT_
 
     aqk, akk = pl.pallas_call(
         lambda *refs: _kernel_a_body(
-            *refs, scale=scale, bt=config.bt, bc=config.bc, n_sub=config.n_sub
+            *refs, scale=scale, bt=config.bt, bc=config.bc, n_sub=config.n_sub,
+            use_centering=config.use_centering,
         ),
         grid=grid,
         in_specs=[in_spec, in_spec, in_spec, in_spec],
@@ -100,6 +115,7 @@ def build_chunk_scores_pallas(q, k, b, g, scale, config: KernelConfig = DEFAULT_
             jax.ShapeDtypeStruct((bsz, H, n_chunks, config.bt, config.bt), jnp.float32),
         ],
         compiler_params=pltpu.CompilerParams(vmem_limit_bytes=100 * 1024 * 1024),
+        interpret=interpret,
     )(q_r, k_r, b_r, g_r)
     return aqk, akk
 
@@ -107,14 +123,6 @@ def build_chunk_scores_pallas(q, k, b, g, scale, config: KernelConfig = DEFAULT_
 # ---------- Kernel B ----------
 def _micro_forward_substitution(T_mb, mb: int, eps: float):
     idx = jnp.arange(mb)
-    # FIX: damp T before the recurrence, not after. Damping the strictly
-    # lower-triangular block by (1-eps) bounds the spectral radius of the
-    # implied Neumann series strictly below 1, so forward substitution
-    # cannot blow up regardless of how close the un-damped Akk is to
-    # singular. This changes WHAT is being solved by O(eps), not just
-    # how the result is post-processed -- clipping after the fact (as
-    # before) let already-corrupted large values propagate through the
-    # recurrence's later steps via `contrib`.
     T_mb = T_mb * (1.0 - eps)
 
     def body(i, A):
@@ -146,10 +154,6 @@ def _block_solve(T_full, config: KernelConfig):
             acc = jnp.zeros((MB, MB), dtype=jnp.float32)
             for k in range(n, m):
                 T_mk = T_full[m * MB:(m + 1) * MB, k * MB:(k + 1) * MB]
-                # FIX: damp off-diagonal coupling blocks too -- same (1-eps)
-                # factor, so the whole solve is consistently damping the
-                # same effective matrix (1-eps)*Akk everywhere, not just
-                # inside the MBxMB diagonal micro-blocks.
                 A_kn = blocks[k][n]
                 contrib = jnp.dot(T_mk * (1.0 - eps), A_kn, precision=_HIGHEST)
                 acc = sanitize(acc + contrib)
@@ -170,6 +174,25 @@ def _block_solve(T_full, config: KernelConfig):
 
 
 def _kernel_b_body(akk_ref, a_ref, *, bt: int, bc: int, config: KernelConfig):
+    # FIX (найдено в grid_bt_bc_condition_diag.py, Часть 3 -- bc<bt/2
+    # давал max|diff vs exact|=1.0 РОВНО, т.е. НЕ численную неточность,
+    # а структурно нулевые блоки): этот top-level 2x2 T00/T11/T10 split
+    # ЖЁСТКО предполагает bt == 2*bc (унаследовано из kernel_b_solve.py,
+    # где это было явным assert'ом -- см. его докстринг "N_SUB=BT//BC=2";
+    # assert потерялся при переносе в этот config-driven файл). При
+    # bc < bt/2 блоки A[2*bc:, :] / A[:, 2*bc:] никогда не записываются
+    # и остаются нулями из инициализации ниже. `bc` здесь -- ТОЛЬКО
+    # размер top-level половины chunk'а, не тонкая настройка точности
+    # решателя (эта роль -- у config.mb внутри _block_solve). Экспери-
+    # ментально подтверждено (та же диагностика, Часть 3, корректный
+    # повторный прогон): mb не влияет на точность решения вообще, только
+    # на скорость -- поэтому единственный валидный способ варьировать
+    # решатель это mb, не bc.
+    assert bt == 2 * bc, (
+        f"Kernel B поддерживает только двухблочный top-level split "
+        f"(bt == 2*bc); получено bt={bt}, bc={bc}. Для варьирования "
+        f"granularity решателя используйте config.mb, а не config.bc."
+    )
     Akk = akk_ref[0, 0, 0].astype(jnp.float32)
     T00 = Akk[0:bc, 0:bc]
     T11 = Akk[bc:2*bc, bc:2*bc]
@@ -179,8 +202,6 @@ def _kernel_b_body(akk_ref, a_ref, *, bt: int, bc: int, config: KernelConfig):
     A11 = _block_solve(T11, config)
 
     eps = config.wy_eps
-    # FIX: same (1-eps) damping on the top-level 2x2 coupling block T10,
-    # for consistency with the inner micro-block solve above.
     tmp = jnp.dot(T10 * (1.0 - eps), A00, precision=_HIGHEST)
     tmp = sanitize(tmp)
     A10 = -jnp.dot(A11, tmp, precision=_HIGHEST)
@@ -194,13 +215,24 @@ def _kernel_b_body(akk_ref, a_ref, *, bt: int, bc: int, config: KernelConfig):
 
 def wy_solve_pallas(Akk, config: KernelConfig = DEFAULT_CONFIG):
     bsz, H, n_chunks = Akk.shape[:3]
+    # FIX: та же проверка, что и внутри _kernel_b_body -- дублируется
+    # здесь намеренно, чтобы падать ДО трейсинга/компиляции Pallas-кернела
+    # (при jit/vmap ошибка внутри _kernel_b_body может всплыть менее
+    # прозрачно). configs.py's KernelConfig.__post_init__ также проверяет
+    # этот инвариант при СОЗДАНИИ конфига -- это третья, самая ранняя
+    # линия защиты.
+    assert config.bt == 2 * config.bc, (
+        f"wy_solve_pallas: bt должен быть == 2*bc (top-level 2-блочный "
+        f"solve), получено bt={config.bt}, bc={config.bc}. Не варьируйте "
+        f"bc независимо от bt -- для granularity решателя есть config.mb."
+    )
     grid = (bsz, H, n_chunks)
     spec = pl.BlockSpec((1, 1, 1, config.bt, config.bt), lambda i, h, c: (i, h, c, 0, 0))
     A = pl.pallas_call(
         lambda *refs: _kernel_b_body(*refs, bt=config.bt, bc=config.bc, config=config),
         grid=grid,
         in_specs=[spec],
-        out_specs=spec,          # было: [spec]
+        out_specs=spec,
         out_shape=jax.ShapeDtypeStruct(Akk.shape, jnp.float32),
         compiler_params=pltpu.CompilerParams(vmem_limit_bytes=96 * 1024 * 1024),
     )(Akk)
@@ -372,7 +404,8 @@ def gdn2_pallas_forward_with_residuals(q, k, v, w, b, g, scale, h0=None,
     Aqk = _stage_diag(f"{debug_tag}:kernel_A_Aqk", Aqk)
     Akk = _stage_diag(f"{debug_tag}:kernel_A_Akk", Akk)
 
-    A = wy_solve_pallas(Akk, config)
+    Akk_damped = Akk * (1.0 - config.wy_eps)
+    A = wy_solve_pallas(Akk_damped, config)
     A = _stage_diag(f"{debug_tag}:kernel_B_wy_inverse_A", A)
 
     w_pseudo, u, kg, qg, gc_last = recompute_wy_pallas(q, k, v, w, b, g, A, config)
@@ -384,11 +417,6 @@ def gdn2_pallas_forward_with_residuals(q, k, v, w, b, g, scale, h0=None,
     o_chunks, h_final, h_pre_all, v_new_all = gdn2_inter_chunk_combine_with_state(
         Aqk, w_pseudo, u, kg, qg, gc_last, scale, h0=h0, config=config, debug_tag=debug_tag
     )
-    # FIX: gdn2_inter_chunk_combine_with_state возвращает h_pre_all/v_new_all
-    # в scan-нативной раскладке (n_chunks -- ведущая ось, axis=0), а не в
-    # (bsz, H, n_chunks, ...) как Aqk и остальные residuals. Backward-кернели
-    # (dav_backward_pallas, wy_dqkg_backward_pallas) ожидают вторую форму.
-    # Была в validated kernel_trainable_B6.py, потерялась при переносе сюда.
     h_pre_all = jnp.moveaxis(h_pre_all, 0, 2)
     v_new_all = jnp.moveaxis(v_new_all, 0, 2)
 
