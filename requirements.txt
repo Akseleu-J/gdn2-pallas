@@ -1,4 +1,8 @@
-jax>=0.4.20
-jaxlib>=0.4.20
-numpy>=1.24
-pytest>=7.0  # для разработки
+# Core JAX 
+jax==0.11.1
+jaxlib==0.11.1
+
+libtpu==0.0.46.1
+
+flax>=0.8.0
+optax>=0.2.0
