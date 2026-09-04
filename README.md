@@ -1,3 +1,49 @@
+```
+gdn2-pallas/
+├── README.md                         # Главная витрина: что, зачем, установка, 1 жирная цифра, ссылки на бенчмарки
+├── LICENSE                           # MIT (обязательно)
+├── CHANGELOG.md                      # История версий (v0.1.0 – initial)
+├── pyproject.toml                    # Настройка пакета (имя, версия, зависимости, entrypoints)
+├── requirements.txt                  # Фиксированные версии: jax, jaxlib, libtpu и др.
+├── .gitignore                        # Стандартный для Python / JAX
+│
+├── docs/
+│   └── TESTING_STRATEGY.md           # Почему и как построены тесты (finite-diff, B3, bf16 и т.д.)
+│
+├── gdn2_pallas/                      # Основной код пакета (бывший Atomic_ops)
+│   ├── __init__.py                   # Экспорт основных функций
+│   ├── configs.py                    # KernelConfig, KAGGLE_SMALL/MEDIUM/LARGE
+│   ├── gdn2_fwd.py                   # Прямой проход Pallas, build_chunk_scores, wy_solve, recompute
+│   ├── gdn2_bwd.py                   # Обратный проход: B1–B6, wy_dqkg_backward, intra_backward и др.
+│   ├── gdn2_pipeline.py              # gdn2_pallas_forward_trainable (custom_vjp) и _gdn2_core_bwd
+│   ├── reference.py                  # Эталонная реализация: gdn2_chunked_wy_reference, token_serial_reference
+│   └── utils.py                      # Вспомогательные (если есть)
+│
+├── tests/
+│   ├── test_gdn2_full_math_correctness.py   # Быстрые тесты корректности (CPU/интерпретация)
+│   ├── extended/                             # Тяжёлые тесты, требующие TPU
+│   │   └── test_gdn2_deep_correctness.py     # finite-diff, B3‑B5, bf16, wy_eps, multiseed (КОД БЕЗ ЛИШНИХ ЭССЕ)
+│   └── conftest.py                           # Настройка pytest (если нужна)
+│
+├── benchmarks/
+│   ├── README.md                            # Сводная таблица скорости (FP32/BF16, fwdbwd), ссылка на полные данные
+│   ├── run_speed_benchmark.py               # Скрипт для замера времени (генерирует JSON и таблицы)
+│   ├── run_memory_benchmark.py              # Скрипт для замера памяти (fork‑isolated, bf16) – будет доделан
+│   ├── benchmark_speed_final_averaged.json  # Агрегированные результаты скорости
+│   ├── benchmark_results_final_averaged.md  # Полные таблицы (как в твоём логе)
+│   └── raw/                                 # Сырые логи (JSON от каждого повтора)
+│       ├── speed_fp32_repeat1.json
+│       ├── speed_fp32_repeat2.json
+│       ├── speed_bf16_repeat1.json
+│       └── speed_bf16_repeat2.json
+│
+├── examples/
+│   └── minimal_usage.py                    # 20‑строчный пример: q,k,v… -> gdn2_pallas_forward_trainable
+│
+└── .github/
+    └── workflows/
+        └── ci_cpu_interpret.yml            # (опционально) прогон быстрых тестов на CPU с interpret=True
+```
 # ⚡ Atomic Ops — Fused GDN-2 Kernels for TPU v5e
 
 [![PyPI](https://img.shields.io/pypi/v/gdn2-pallas)](https://pypi.org/project/gdn2-pallas/)
