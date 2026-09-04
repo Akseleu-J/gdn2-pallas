@@ -1,0 +1,24 @@
+{
+  "fp32": [
+    {"config": "small_B1_L1024", "stage": "fwd", "OLD_mb": 36.361, "JAX_REF_mb": 30.993, "PALLAS_mb": 35.185},
+    {"config": "small_B1_L1024", "stage": "bwd", "OLD_mb": 95.571, "JAX_REF_mb": 72.110, "PALLAS_mb": 75.766},
+    {"config": "small_B1_L1024", "stage": "fwdbwd", "OLD_mb": 95.605, "JAX_REF_mb": 72.168, "PALLAS_mb": 75.822},
+    {"config": "medium_B4_L4096", "stage": "fwd", "OLD_mb": 422.095, "JAX_REF_mb": 417.010, "PALLAS_mb": 420.383},
+    {"config": "medium_B4_L4096", "stage": "bwd", "OLD_mb": 962.204, "JAX_REF_mb": 941.402, "PALLAS_mb": 933.817},
+    {"config": "medium_B4_L4096", "stage": "fwdbwd", "OLD_mb": 962.264, "JAX_REF_mb": 941.478, "PALLAS_mb": 933.897},
+    {"config": "train_shape_B8_L4096", "stage": "fwd", "OLD_mb": 829.708, "JAX_REF_mb": 830.193, "PALLAS_mb": 828.515},
+    {"config": "train_shape_B8_L4096", "stage": "bwd", "OLD_mb": 503.358, "JAX_REF_mb": 1857.038, "PALLAS_mb": 1845.268},
+    {"config": "train_shape_B8_L4096", "stage": "fwdbwd", "OLD_mb": 503.418, "JAX_REF_mb": 1857.137, "PALLAS_mb": 1845.344}
+  ],
+  "bf16": [
+    {"config": "small_B1_L1024", "stage": "fwd", "OLD_mb": 31.046, "JAX_REF_mb": 31.046, "PALLAS_mb": 31.046},
+    {"config": "small_B1_L1024", "stage": "bwd", "OLD_mb": 70.918, "JAX_REF_mb": 42.922, "PALLAS_mb": 47.461},
+    {"config": "small_B1_L1024", "stage": "fwdbwd", "OLD_mb": 70.975, "JAX_REF_mb": 42.979, "PALLAS_mb": 47.518},
+    {"config": "medium_B4_L4096", "stage": "fwd", "OLD_mb": 460.421, "JAX_REF_mb": 460.421, "PALLAS_mb": 460.421},
+    {"config": "medium_B4_L4096", "stage": "bwd", "OLD_mb": 518.213, "JAX_REF_mb": 487.722, "PALLAS_mb": 480.888},
+    {"config": "medium_B4_L4096", "stage": "fwdbwd", "OLD_mb": 518.279, "JAX_REF_mb": 487.797, "PALLAS_mb": 480.966},
+    {"config": "train_shape_B8_L4096", "stage": "fwd", "OLD_mb": 915.486, "JAX_REF_mb": 915.486, "PALLAS_mb": 915.486},
+    {"config": "train_shape_B8_L4096", "stage": "bwd", "OLD_mb": 285.590, "JAX_REF_mb": 948.672, "PALLAS_mb": 939.341},
+    {"config": "train_shape_B8_L4096", "stage": "fwdbwd", "OLD_mb": 285.656, "JAX_REF_mb": 948.771, "PALLAS_mb": 939.418}
+  ]
+}
