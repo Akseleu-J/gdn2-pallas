@@ -6,17 +6,17 @@ import sys
 import jax
 import jax.numpy as jnp
 
-from Atomic_ops.configs import KernelConfig, KAGGLE_SMALL
-from Atomic_ops.gdn2_fwd import (
+from atomic_ops.configs import KernelConfig, KAGGLE_SMALL
+from atomic_ops.gdn2_fwd import (
     build_chunk_scores_pallas, wy_solve_pallas, recompute_wy_pallas,
     gdn2_pallas_forward,
 )
-from Atomic_ops.gdn2_pipeline import gdn2_pallas_forward_trainable
-from Atomic_ops.gdn2_bwd import (
+from atomic_ops.gdn2_pipeline import gdn2_pallas_forward_trainable
+from atomic_ops.gdn2_bwd import (
     wy_dqkg_backward_pallas, intra_backward_pallas, reverse_cumsum_bwd,
     dav_backward_pallas, gdn2_dhu_backward,
 )
-from Atomic_ops.reference import gdn2_token_serial_reference
+from atomic_ops.reference import gdn2_token_serial_reference
 
 _HIGHEST = jax.lax.Precision.HIGHEST
 _FAILURES = []
@@ -73,11 +73,7 @@ def test_finite_diff_gradient(cfg):
     bt = cfg["bt"]
     config = KernelConfig(bt=bt, bc=bt // 2, mb=min(16, bt // 2), wy_eps=0.0)
     key = jax.random.PRNGKey(101)
-    # Small shapes -- finite differences over the full pipeline are
-    # expensive (one extra fwd+bwd-shaped forward pass PER perturbed
-    # scalar), so this checks a handful of random coordinates per tensor
-    # rather than every element.
-    bsz, H, D, n_chunks = 1, 1, 128, 1
+    sz, H, D, n_chunks = 1, 1, 128, 1
     q, k, v, w, b, g, h0 = _make_inputs(key, bsz, n_chunks, bt, H, D,
                                          decay_scale=0.1, h0_nonzero=True)
 
@@ -266,9 +262,6 @@ def test_b4_intra_backward(cfg):
     dq_p, dk_p, db_p, dgc_p = intra_backward_pallas(dAqk, dAkk, q, k, b, g, scale=1.0,
                                                       config=config, interpret=cfg["interpret"])
 
-    # Independent cross-check: Aqk/Akk as a function of (q,k,b,g), fresh
-    # jax.vjp (not reused from any file), dotted with the SAME (dAqk,dAkk)
-    # cotangents fed to the Pallas kernel.
     def scores_fwd(q_, k_, b_, g_):
         gc = jnp.cumsum(g_.astype(jnp.float32), axis=1)
         gc_bhcd = jnp.moveaxis(gc, 2, 1)
@@ -291,7 +284,6 @@ def test_b4_intra_backward(cfg):
     idx = jnp.arange(bt)
     tril_ones_bt = (idx[:, None] >= idx[None, :]).astype(jnp.float32)
     dgc_m = jnp.einsum("ij,bicd->bjcd", tril_ones_bt, dg_m.reshape(dg_m.shape[0], bt, 1, cfg["H"], cfg["D"])[:, :, 0])
-    # reshape dgc_p (bsz,H,n_chunks,bt,D) -> (bsz,bt,H,D) to match dgc_m's convention above
     dgc_p_cmp = jnp.moveaxis(dgc_p[:, :, 0], 0, 1)  # (bt, bsz, H, D) -- fix axis order below
     dgc_p_cmp = jnp.moveaxis(dgc_p[:, :, 0], 1, 0)  # -> we want (bsz, bt, H, D)
 
