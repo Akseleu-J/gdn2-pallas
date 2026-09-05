@@ -28,13 +28,13 @@ The most important metric for training. Measured in **milliseconds (ms)**.
 Peak memory usage measured in **Megabytes (MB)** during the full forward+backward pass (process-isolated).  
 Lower is better.
 
-| Config | Dtype | OLD (MB) | JAX_REF (MB) | PALLAS (MB) | Δ vs JAX_REF |
-|--------|-------|----------|--------------|-------------|--------------|
-| **train_shape (B=8,L=4096)** | FP32 | 503.42 | 1857.14 | **1845.34** | **-11.79 MB** ✅ |
-| **train_shape (B=8,L=4096)** | BF16 | 285.66 | 948.77 | **939.42** | **-9.35 MB** ✅ |
+| Config | Dtype | OLD (MB) | JAX_REF (MB) | PALLAS (MB) |
+|--------|-------|----------|--------------|-------------|
+| train_shape_B8_L4096 (B=8) | fp32 | 1252.746 | 1250.011 | 1238.111 |
+| train_shape_B8_L4096 (B=8) | bf16 | 915.486 | 915.486 | 915.486 |
 
-> **Key takeaway:** On the largest training config, PALLAS uses **less memory** than JAX_REF (saving ~10 MB) while being drastically faster.  
-> *Note: On smaller configs, PALLAS may use slightly more memory (~5-20 MB) than JAX_REF, which is negligible compared to the speed gains.*
+
+
 
 ---
 
