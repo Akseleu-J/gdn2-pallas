@@ -201,6 +201,7 @@ def _kernel_b_body(akk_ref, a_ref, *, bt: int, bc: int, config: KernelConfig):
 
 
 def wy_solve_pallas(Akk, config: KernelConfig = DEFAULT_CONFIG):
+    bsz, H, n_chunks = Akk.shape[:3]
     assert config.bt == 2 * config.bc, (
         f"wy_solve_pallas: bt должен быть == 2*bc (top-level 2-блочный "
         f"solve), получено bt={config.bt}, bc={config.bc}. Не варьируйте "
