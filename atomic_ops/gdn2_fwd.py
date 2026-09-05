@@ -402,7 +402,7 @@ def gdn2_pallas_forward_with_residuals(q, k, v, w, b, g, scale, h0=None,
     o = _reshape_from_chunks(o_chunks, bsz, n_chunks, config.bt, H, D)
 
     residuals = {
-        Aqk": Aqk, "Akk": Akk, "A": A,
+        "Aqk": Aqk, "Akk": Akk, "A": A,
         "h_pre_all": h_pre_all, "v_new_all": v_new_all,
         "w_pseudo": w_pseudo, "u": u, "kg": kg, "qg": qg, "gc_last": gc_last,
     }
