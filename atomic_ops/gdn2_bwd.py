@@ -256,7 +256,16 @@ def _kernel_b4_body(q_ref, k_ref, b_ref, g_ref, daqk_ref, dakk_ref,
     if use_centering:
         n_mid = bt // 2
         gn = gc[n_mid]
-        dgn_acc = jnp.zeros_like(gn)   
+        # WIP / KNOWN BROKEN: this accumulator exists so the loop below has
+        # somewhere to write dgn contributions, but the write-back into
+        # dgc_ref[..., n_mid] at the end of this function is INCOMPLETE --
+        # it does not correctly account for every path through which gn
+        # affects the forward output (see KNOWN_LIMITATIONS.md, "Bugs 2/3").
+        # This is why KernelConfig.__post_init__ hard-refuses
+        # use_centering=True for any config used by
+        # gdn2_pallas_forward_trainable. Do NOT treat the presence of this
+        # accumulator as evidence the gradient path is fixed -- it is not.
+        dgn_acc = jnp.zeros_like(gn)
 
     for si in range(n_sub):
         for sj in range(si + 1):

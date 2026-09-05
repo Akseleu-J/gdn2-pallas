@@ -6,6 +6,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-05
+
+### Fixed
+
+- Renamed `CHANGEOLOG.md` -> `CHANGELOG.md` (referenced correctly by
+  `CONTRIBUTING.md` but the file itself had a typo in its name).
+- Fixed stale script names in `docs/TESTING_STRATEGY.md`
+  (`run_speed.py`/`run_memory.py` -> `run_speed_benchmark.py`/`run_memory_benchmark.py`).
+
+<!-- If 0.1.1 also ships the hybrid-model beta groundwork, add those
+     entries here too, e.g.:
+### Added
+- (beta, opt-in) Hybrid `<name>` module scaffolding -- not yet part of the
+  public `atomic_ops` API surface; see `docs/HYBRID_BETA.md` once published.
+-->
+
 ## [0.1.0] - 2026-09-05
 
 ### Added
@@ -45,5 +61,6 @@ propagate gradients through the centering reference point). See
 | fwd+bwd vs pure-JAX chunked WY | 2.6x | 3.4x |
 | Best-case vs associative_scan (all shapes) | 38.8x | 18.7x |
 
-[Unreleased]: https://github.com/Akseleu-J/gdn2-pallas/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Akseleu-J/gdn2-pallas/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/Akseleu-J/gdn2-pallas/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Akseleu-J/gdn2-pallas/releases/tag/v0.1.0

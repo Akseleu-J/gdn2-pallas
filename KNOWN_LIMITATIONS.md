@@ -12,6 +12,14 @@ gradient contribution through the shared centering reference point `gn` into
 `dgc`. Constructing a config with `use_centering=True` raises
 `NotImplementedError` from `KernelConfig.__post_init__` so that no one can
 accidentally train through it via `gdn2_pallas_forward_trainable`.
+**Note:** `_kernel_b4_body` does contain a partial `dgn_acc` accumulator and
+a write-back into `dgc_ref[..., n_mid]` for the centering branch -- this is
+leftover/in-progress work, not a fix. It does not correctly cover every path
+by which `gn` affects the forward pass, and a leaked loop variable can be
+double-applied across sub-block iterations. Treat the whole `use_centering`
+branch of `_kernel_b4_body` as unverified until Bugs 2/3 below are closed
+and it passes the same finite-difference gradient check (Layer 4 in
+`docs/TESTING_STRATEGY.md`) as the default path.
 **Workaround:** forward-only consumers may call the underlying forward kernels
 (`build_chunk_scores_pallas`) directly with an unfrozen
 `dataclasses.replace(DEFAULT_CONFIG, use_centering=True)` config, and take

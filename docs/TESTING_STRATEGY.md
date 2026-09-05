@@ -70,8 +70,8 @@ Catches bugs that only appear with a different blocking grid (e.g., earlier we d
 
 ## 3. What these tests do NOT cover (by design)
 
-- **Performance / speed** – that is the job of `benchmarks/run_speed.py` (which compares OLD, JAX_REF, and PALLAS, with correctness gates before timing).
-- **Memory (HBM) usage** – peak memory is measured in a separate, process‑isolated benchmark (`benchmarks/run_memory.py`) that uses forking to get an honest peak without interference from previous runs. Memory numbers are published separately and are not part of the correctness suite.
+- **Performance / speed** – that is the job of `benchmarks/run_speed_benchmark.py` (which compares OLD, JAX_REF, and PALLAS, with correctness gates before timing).
+- **Memory (HBM) usage** – peak memory is measured in a separate, process‑isolated benchmark (`benchmarks/run_memory_benchmark.py`) that uses forking to get an honest peak without interference from previous runs. Memory numbers are published separately and are not part of the correctness suite.
 - **Full pipeline on CPU** – `wy_solve_pallas`, `recompute_wy_pallas`, `dav_backward_pallas`, and `wy_dqkg_backward_pallas` call `pl.pallas_call` without `interpret=True`, so they expect TPU‑specific lowering. Only `build_chunk_scores_pallas` (Kernel A) and `intra_backward_pallas` (B4) support `interpret=True` and can run on CPU. That determines what goes into the CPU smoke test.
 
 ---
