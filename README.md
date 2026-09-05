@@ -6,7 +6,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![TPU v5e](https://img.shields.io/badge/TPU-v5e-orange.svg)](https://cloud.google.com/tpu/docs/v5e)
 
-A from-scratch port of the [NVlabs Gated DeltaNet-2](https://github.com/NVlabs/Gated_DeltaNet2) Triton kernels
+A from-scratch port of the [NVlabs Gated DeltaNet-2](https://github.com/NVlabs/GatedDeltaNet-2) Triton kernels
 to `jax.experimental.pallas`, targeting **TPU v5e-8**. The backward pass is a single fused `custom_vjp`
 that reuses forward residuals instead of recomputing them.
 
