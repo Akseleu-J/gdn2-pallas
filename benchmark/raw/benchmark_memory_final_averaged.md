@@ -9,34 +9,30 @@ Only three representative configs are shown; full raw data is available in `raw/
 
 ## FP32
 
-| Config | Stage | OLD (MB) | JAX_REF (MB) | PALLAS (MB) |
-|--------|-------|----------|--------------|-------------|
-| small_B1_L1024 | fwd | 36.361 | 30.993 | 35.185 |
-| small_B1_L1024 | bwd | 95.571 | 72.110 | 75.766 |
-| small_B1_L1024 | fwdbwd | 95.605 | 72.168 | 75.822 |
-| medium_B4_L4096 | fwd | 422.095 | 417.010 | 420.383 |
-| medium_B4_L4096 | bwd | 962.204 | 941.402 | 933.817 |
-| medium_B4_L4096 | fwdbwd | 962.264 | 941.478 | 933.897 |
-| train_shape_B8_L4096 | fwd | 829.708 | 830.193 | 828.515 |
-| train_shape_B8_L4096 | bwd | 503.358 | 1857.038 | 1845.268 |
-| train_shape_B8_L4096 | fwdbwd | 503.418 | 1857.137 | 1845.344 |
+| config (batch) | stage | OLD (MB) | JAX_REF (MB) | PALLAS (MB) |
+|---|---|---|---|---|
+| small_B1_L1024 (B=1) | fwd | 32.822 | 27.454 | 31.646 |
+| small_B1_L1024 (B=1) | bwd | 76.303 | 52.842 | 56.386 |
+| small_B1_L1024 (B=1) | fwdbwd | 76.337 | 52.900 | 56.443 |
+| train_shape_B8_L4096 (B=8) | fwd | 725.899 | 726.384 | 724.706 |
+| train_shape_B8_L4096 (B=8) | bwd | 1252.688 | 1249.912 | 1238.035 |
+| train_shape_B8_L4096 (B=8) | fwdbwd | 1252.746 | 1250.011 | 1238.111 |
 
 ---
 
 ## BF16
 
-| Config | Stage | OLD (MB) | JAX_REF (MB) | PALLAS (MB) |
-|--------|-------|----------|--------------|-------------|
-| small_B1_L1024 | fwd | 31.046 | 31.046 | 31.046 |
-| small_B1_L1024 | bwd | 70.918 | 42.922 | 47.461 |
-| small_B1_L1024 | fwdbwd | 70.975 | 42.979 | 47.518 |
-| medium_B4_L4096 | fwd | 460.421 | 460.421 | 460.421 |
-| medium_B4_L4096 | bwd | 518.213 | 487.722 | 480.888 |
-| medium_B4_L4096 | fwdbwd | 518.279 | 487.797 | 480.966 |
-| train_shape_B8_L4096 | fwd | 915.486 | 915.486 | 915.486 |
-| train_shape_B8_L4096 | bwd | 285.590 | 948.672 | 939.341 |
-| train_shape_B8_L4096 | fwdbwd | 285.656 | 948.771 | 939.418 |
+| config (batch) | stage | OLD (MB) | JAX_REF (MB) | PALLAS (MB) |
+|---|---|---|---|---|
+| small_B1_L1024 (B=1) | fwd | 31.046 | 31.046 | 31.046 |
+| small_B1_L1024 (B=1) | bwd | 61.088 | 33.092 | 37.544 |
+| small_B1_L1024 (B=1) | fwdbwd | 61.144 | 33.148 | 37.601 |
+| train_shape_B8_L4096 (B=8) | fwd | 915.486 | 915.486 | 915.486 |
+| train_shape_B8_L4096 (B=8) | bwd | 915.486 | 915.486 | 915.486 |
+| train_shape_B8_L4096 (B=8) | fwdbwd | 915.486 | 915.486 | 915.486 |
+
 
 ---
 
 *Note: memory values are the mean peak over 3 seeds; standard deviations were negligible.*
+
