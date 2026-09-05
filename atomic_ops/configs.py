@@ -19,8 +19,8 @@ class KernelConfig:
     bc: int = 128
     mb: int = 16
     clip: float = 1e4
-    wy_eps: float = 0.0          # NEW: Tikhonov damping strength, 0 = off (current behavior)
-    use_centering: bool = False  # NEW: midpoint-centered decay factorization in Kernel A/B4
+    wy_eps: float = 0.0          
+    use_centering: bool = False 
 
     @property
     def n_sub(self) -> int:
@@ -33,22 +33,6 @@ class KernelConfig:
     def __post_init__(self):
         if self.bt % self.bc != 0:
             raise ValueError(f"bt={self.bt} must be divisible by bc={self.bc}")
-        # FIX (найдено в grid_bt_bc_condition_diag.py, Часть 3 -- bc<bt/2
-        # давал max|diff vs exact|=1.0 РОВНО, т.е. НЕ численную
-        # неточность, а структурно нулевые блоки): wy_solve_pallas'
-        # top-level solve (Kernel B, _kernel_b_body) реализует ТОЛЬКО
-        # двухблочный split (T00/T11/T10) и жёстко предполагает
-        # bt == 2*bc. При bc < bt/2 три четверти матрицы решения A
-        # никогда не записываются и остаются нулями из инициализации --
-        # это не деградация точности, а отсутствие вычисления вообще.
-        # `bc` НЕ является ручкой точности/устойчивости решателя --
-        # экспериментально подтверждено (grid_bt_bc_condition_diag.py,
-        # Часть 3, повторный корректный прогон), что `mb` (granularity
-        # внутри block-recursive forward substitution) не влияет на
-        # точность решения вообще -- только на скорость. Проверяем
-        # инвариант здесь, чтобы невалидный KernelConfig нельзя было
-        # создать вообще, включая экспериментальные/диагностические
-        # скрипты.
         if self.bt != 2 * self.bc:
             raise ValueError(
                 f"bt={self.bt} must equal 2*bc (top-level WY-solve split "
@@ -61,6 +45,19 @@ class KernelConfig:
             raise ValueError(f"bc={self.bc} must be divisible by mb={self.mb}")
         if not (0.0 <= self.wy_eps < 1.0):
             raise ValueError(f"wy_eps={self.wy_eps} must be in [0, 1)")
+        
+        if self.use_centering:
+            raise NotImplementedError(
+                "use_centering=True is not safe for training: the B4 "
+                "backward kernel (_kernel_b4_body) does not propagate the "
+                "gradient contribution through the shared reference point "
+                "`gn` into dgc (see KNOWN_LIMITATIONS.md). Forward-only "
+                "consumers must call the underlying forward kernels "
+                "directly with an unfrozen dataclasses.replace(...) config "
+                "and take responsibility for not differentiating through "
+                "it; the public KernelConfig refuses to construct this "
+                "config to prevent accidental use in gdn2_pallas_forward_trainable."
+            )
 
 
 KAGGLE_SMALL = KernelConfig(bt=128, bc=64, mb=16, clip=1e4, wy_eps=1e-3)
