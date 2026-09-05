@@ -149,7 +149,7 @@ the fused **backward is 2.6–3.9× faster** than JAX_REF, and since real traini
 backward-dominated, the full cycle wins by **2.6–3.9×** over the fastest pure-JAX baseline and
 by **11.5–38.8×** over the `associative_scan` baseline depending on shape and dtype.
 Full per-stage tables for all configs and both dtypes:
-[`benchmark/raw/benchmark_speed_final_averaged.md`](benchmark/raw/benchmark_speed_final_averaged.md).
+[`benchmarks/raw/benchmark_speed_final_averaged.md`](benchmarks/raw/benchmark_speed_final_averaged.md).
 
 ### Peak HBM — train shape (B=8, L=4096), forward+backward
 
@@ -160,13 +160,13 @@ Full per-stage tables for all configs and both dtypes:
 
 Memory is on par with the pure-JAX reference (the backward reuses forward residuals instead of
 recomputing them). Details:
-[`benchmark/raw/benchmark_memory_final_averaged.md`](benchmark/raw/benchmark_memory_final_averaged.md).
+[`benchmarks/raw/benchmark_memory_final_averaged.md`](benchmarks/raw/benchmark_memory_final_averaged.md).
 
 ### Reproduce
 
 ```bash
-python benchmark/run_speed.py     # writes JSON + markdown tables
-python benchmark/run_memory.py    # fork-isolated peak HBM measurement
+python benchmarks/run_speed_benchmark.py     # writes JSON + markdown tables
+python benchmarks/run_memory_benchmark.py    # fork-isolated peak HBM measurement
 ```
 
 Every timing run is correctness-gated before measurement (Pallas output must match the reference
@@ -227,7 +227,7 @@ gdn2-pallas/
 │   ├── reference.py             # token-serial + chunked-WY pure-JAX references
 │   ├── fallback.py              # auto-dispatch (TPU+d_head=128 -> Pallas, else reference)
 │   └── utils.py                 # is_tpu_available, estimate_memory, get_recommended_config
-├── benchmark/                   # speed & memory benchmarks + raw results
+├── benchmarks/                  # speed & memory benchmarks + raw results
 ├── tests/                       # CPU smoke tests
 │   └── extended/                # full TPU correctness suite
 ├── examples/                    # minimal_usage.py + Flax training step
