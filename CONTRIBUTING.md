@@ -18,9 +18,10 @@ pre-commit install
 
 ```bash
 pytest tests/test_gdn2_full_math_correctness.py -v
+python tests/extended/test_gdn2_deep_correctness_mini.py
 ```
 
-These tests use `interpret=True` and run in seconds on any machine.
+These use `interpret=True` / plain JAX and run in seconds on any machine.
 
 ### Full correctness suite (requires TPU)
 
@@ -29,13 +30,13 @@ pytest tests/extended/test_gdn2_deep_correctness.py -v
 ```
 
 This includes finite-difference gradient checks, multi-seed sweeps, bf16
-coverage, and isolated backward-kernel tests (B3–B5).
+coverage, and isolated backward-kernel tests (B3-B5).
 
 ### Benchmarks
 
 ```bash
-python benchmarks/run_speed.py
-python benchmarks/run_memory.py
+python benchmarks/run_speed_benchmark.py
+python benchmarks/run_memory_benchmark.py
 ```
 
 ## Code style
@@ -71,5 +72,5 @@ template and include:
 ## Architecture questions
 
 For questions about the WY-formulation, kernel blocking strategy, or the
-backward chain (B1–B5), see `docs/TESTING_STRATEGY.md` and inline docstrings
+backward chain (B1-B5), see `docs/TESTING_STRATEGY.md` and inline docstrings
 in `atomic_ops/gdn2_fwd.py` and `atomic_ops/gdn2_bwd.py`.
