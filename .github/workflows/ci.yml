@@ -39,8 +39,14 @@ jobs:
           JAX_PLATFORMS: cpu
           GDN2_FWD_DIAG: "0"
 
-      - name: Run extended CPU correctness (mini)
+      - name: Run remaining unit tests
         run: |
-          # If a mini/skip-TPU version of deep tests exists, run it here.
-          # For now we rely on the main smoke test above.
-          echo "Extended TPU tests are skipped in CI (no TPU runners)."
+          pytest tests/test_configs.py tests/test_reference.py tests/test_imports.py tests/test_clip_config_plumbing.py tests/test_pallas.py -v --tb=short
+        env:
+          JAX_PLATFORMS: cpu
+
+      - name: Run CPU-fast mini deep-correctness subset
+        run: |
+          python tests/extended/test_gdn2_deep_correctness_mini.py
+        env:
+          JAX_PLATFORMS: cpu
