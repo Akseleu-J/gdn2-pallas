@@ -173,11 +173,10 @@ B5 0.790 ms
 Kernel A and its backward counterpart B4 use the same
 broadcast-multiply-reduce pattern (`_weighted_pair_sum` /
 `_dL_pair_sum`/`_dR_pair_sum`/`_dgc_pair_sum`) instead of a true MXU
-matmul. An MXU-factorized alternative (tentatively `use_centering`) is a
-documented hypothesis in `ROADMAP.md`, not yet implemented anywhere in
-this codebase. This VPU/MXU gap is currently the leading, evidence-backed
-hypothesis for the majority of the fwd/bwd slowdown vs JAX_REF -- not
-kernel-count/dispatch overhead.
+matmul; this is the same computation the `use_centering=True` path
+already factors into real `jnp.dot` calls (section 1). This is currently
+the leading, evidence-backed hypothesis for the majority of the
+fwd/bwd slowdown vs JAX_REF -- not kernel-count/dispatch overhead.
 
 **Not yet done:** `compiled.cost_analysis()` (flops / bytes-accessed) on
 Kernel A/B in isolation, to directly confirm VPU- vs MXU-bound and rule
@@ -201,16 +200,14 @@ sufficient to reject the dispatch-overhead hypothesis.
 - Document this file's findings (this update).
 
 **v0.2.0 (planned):**
-- Validate the section 5 hybrid path fully end-to-end (see its open
-  items list); this is a precondition, not optional.
-- Only if the hybrid path does not fully close the fwd/bwd gap: prototype
-  and validate the `use_centering` MXU-factorization hypothesis from
-  scratch (see `ROADMAP.md` -- no code for it exists yet), including its
-  own isolated correctness/speed tests and the full deep-correctness
-  suite (`tests/extended/test_gdn2_deep_correctness.py`).
-- If validated and shown to close most of the forward gap: this becomes
-  the primary fix, and the section 5 hybrid path is downgraded to a
-  documented alternative rather than the default recommendation.
+- Complete `dgn` gradient propagation in B4 (`_kernel_b4_body`), lift the
+  `use_centering=True` restriction in `KernelConfig`.
+- Re-run the full correctness suite (`tests/extended/test_gdn2_deep_correctness.py`)
+  and the kernel-gap diagnostic with `use_centering=True` on Kernel A/B4.
+- If confirmed to close most of the forward gap: this becomes the primary
+  fix, and the section 5 hybrid path is downgraded to a documented
+  alternative rather than the default recommendation (its main advantage
+  -- fast forward -- would be subsumed by a genuinely fast Pallas forward).
 - Independently investigate Kernel B (`wy_solve_pallas`, `MB=16`
   sub-tile solve) via `cost_analysis()` and a micro-block-size sweep --
   not yet confirmed to share the same root cause as Kernel A/B4.

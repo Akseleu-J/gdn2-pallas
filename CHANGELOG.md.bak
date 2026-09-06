@@ -54,9 +54,9 @@ BF16 dtype-contract checks, `wy_eps` damping coverage
 - The fused forward is currently slower than the pure-JAX WY forward
 (~0.62x on TPU v5e-8, forward-only). Training steps are backward-dominated,
 so the full cycle is still 2.6-3.9x faster than the best pure-JAX baseline.
-- The pairwise decay computation (Kernel A / B4) is VPU-bound rather than MXU-bound; an
-MXU-factorized `use_centering` alternative is a documented post-beta hypothesis, not
-implemented in this release. See `KNOWN_LIMITATIONS.md` and `ROADMAP.md`.
+- `use_centering=True` is disabled by `KernelConfig` (B4 backward does not
+propagate gradients through the centering reference point). See
+`KNOWN_LIMITATIONS.md`.
 
 ### Performance (TPU v5e-8, train shape B=8, L=4096, 6 heads, d_head=128)
 

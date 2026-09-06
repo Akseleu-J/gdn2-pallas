@@ -22,57 +22,71 @@ benchmarks, but they are not a substitute for the end-to-end gate.
 
 ---
 
-## Now: `use_centering=True` — ISOLATED-ONLY, pending e2e validation
+## Hypothesis (post-beta, not implemented): MXU-factorized pairwise decay (`use_centering`)
 
-**What has been measured:**
+**Status:** HYPOTHESIS ONLY. No code for this exists anywhere in the
+package -- no `KernelConfig` field, no kernel branch in `gdn2_fwd.py` /
+`gdn2_bwd.py`, no `NotImplementedError` gate. Nothing below has been
+measured in this repository; it is written down here so the idea isn't
+lost or re-invented from scratch, and so it isn't attempted before its
+listed prerequisite.
 
-| Item | Status | Evidence |
-| --- | --- | --- |
-| Kernel A (forward scores) correctness | ISOLATED-ONLY | `test_kernel_a_use_centering_matches_default`, rel_err~2.5e-6 |
-| Kernel A (forward scores) speed | ISOLATED-ONLY | `bench_a_centering_speed.py`, 9.23x on train shape |
-| Kernel B4 (intra backward) `dgn` gradient correctness | ISOLATED-ONLY | `test_b4_centering_dgc_isolated`, rel_err~3-5e-7 on dq/dk/db/dgc, cross-checked against an independently re-derived `jax.vjp` reference (not the kernel's own code) |
-| Kernel B4 (intra backward) speed | ISOLATED-ONLY | `bench_b4_centering_speed.py`: train_shape 62.079ms -> 2.423ms (25.62x); small 5.30x; KAGGLE_SMALL preset 12.18x |
-| Full `custom_vjp` pipeline correctness (multi-seed, finite-diff, bf16, KAGGLE_SMALL blocking) | ISOLATED-ONLY (partial) | `test_gdn2_deep_correctness_centering.py` C1-C6 passed with `wy_eps=1e-3`; `finite_diff.b` required 3-seed averaging to suppress a documented WY-solve/FD conditioning artifact (`diag_c1_b_finite_diff.py`), independently confirmed not centering-specific |
-| End-to-end fwd/bwd/fwdbwd wall-clock through `gdn2_pallas_forward_trainable` | **NOT YET MEASURED** | pending `run_speed_benchmark.py` run with the `PALLAS_CENTERED` path (patch prepared, not yet executed) |
+**Why this is being tracked at all:** `KNOWN_LIMITATIONS.md` section 1/6
+identifies the pairwise decay computation in Kernel A
+(`build_chunk_scores_pallas`) and its backward counterpart B4
+(`intra_backward_pallas`) as VPU-bound (`_weighted_pair_sum` /
+`_dL_pair_sum` / `_dR_pair_sum` / `_dgc_pair_sum`: broadcast + elementwise
+multiply + manual reduction) rather than MXU-bound. In principle,
+centering the pairwise decay term `exp(gc_i - gc_j)` around a shared
+per-chunk reference point `gn` (e.g. `gn = gc[bt // 2]`) factors it into
+two real matmuls (`q_scaled @ k_scaled.T`) instead of a VPU reduction,
+which is the kind of change that could meaningfully close the forward gap
+described in `KNOWN_LIMITATIONS.md` section 2.
 
-**Why this is not yet "resolved":** isolated Kernel A / B4 benchmarks
-measure those two kernels' own `pallas_call`s in isolation. They do not
-by themselves prove that:
-- the changed intermediate values (`Aqk`, `Akk` under the centered
-  factorization) don't introduce a different cost profile in Kernel C/D
-  or in B1/B2/B3 once chained together in the real scan;
-  or B3's `dAkk` handoff behave identically once composed rather than
-  benchmarked independently.
-- there is no compile-time or dispatch regression specific to the
-  combination of all Pallas calls together (the section-6 kernel-gap
-  diagnostic found this gap to be negligible for the *pre-centering*
-  pipeline, but that finding has not been re-run post-centering).
+**Explicit precondition -- do not start this before it is met:** the
+`beta/gdn2_hybrid.py` path (JAX-forward + fused Pallas-backward, see
+`KNOWN_LIMITATIONS.md` section 5) must be fully validated end-to-end
+first (residual-parity test, BF16 numbers, memory numbers, full
+deep-correctness suite -- see that section's open-items list). The
+hybrid path is a smaller, already-working change; if it turns out to
+close the forward/backward gap on its own, an MXU-factorized rewrite of
+Kernel A/B4 may not be worth its implementation and validation cost. This
+hypothesis is the fallback plan **if and only if** the hybrid path is
+validated and still leaves a meaningful gap versus JAX_REF/PALLAS.
 
-**Gating criteria before promoting `use_centering=True` to the
-`KAGGLE_SMALL/MEDIUM/LARGE` defaults:**
+**What "validating this hypothesis" would require, if pursued (none of
+this exists yet):**
+1. A from-scratch implementation of the centered factorization in
+   `_kernel_a_body`, gated behind a new, explicitly-named opt-in
+   `KernelConfig` field (with its own `NotImplementedError` safety gate,
+   matching how every other experimental knob in this codebase is
+   introduced) -- not assumed to already exist.
+2. Isolated correctness test (vs. the default/non-centered path) and
+   isolated speed benchmark for Kernel A, then the same for the B4
+   backward counterpart, including the backward gradient contribution
+   through the shared reference point `gn` (chain rule through
+   `eq_i = exp(clip(gc_i - gn))`, `ek_j = exp(clip(gn - gc_j))`) --
+   this is exactly the kind of shared-variable backward term that is
+   easy to compute but easy to forget to write back; any implementation
+   must have an explicit isolated test for it, independently re-derived
+   (not copy-pasted from the forward kernel), before it is trusted.
+3. Full `custom_vjp` pipeline correctness (multi-seed vs.
+   `gdn2_token_serial_reference`, finite-difference, `wy_eps` damping
+   interaction, bf16 coverage, `KAGGLE_SMALL` blocking) -- per the
+   layered strategy in `docs/TESTING_STRATEGY.md`.
+4. End-to-end fwd/bwd/fwdbwd wall-clock through
+   `gdn2_pallas_forward_trainable`, not just isolated kernel calls.
+5. Peak HBM (`run_memory_benchmark.py`) for the new path.
+6. A repeat of the kernel-gap diagnostic (sum of isolated per-kernel
+   timings vs. full pipeline) to rule out a new dispatch/scheduling gap
+   from the changed intermediate shapes.
 
-1. [ ] Run `benchmarks/run_speed_benchmark.py` with the `PALLAS_CENTERED`
-   path (patch: `patches/0001-pallas-centered-e2e-bench.patch`) across all
-   `CONFIGS`, both dtypes. Correctness + gradient gates must pass for
-   every config (the patch skips timing but not the run for any config
-   that fails).
-2. [ ] Compare `PALLAS_CENTERED` fwd/bwd/fwdbwd against both `JAX_REF`
-   and plain `PALLAS` end-to-end — confirm the isolated-kernel speedups
-   (9.23x / 25.62x) survive composition, not just in-isolation.
-3. [ ] Re-run the section-6-style kernel-gap diagnostic
-   (`sum(isolated per-kernel timing)` vs `full pipeline timing`) for the
-   centered path specifically, to rule out a new dispatch/scheduling gap
-   introduced by centering's different intermediate shapes.
-4. [ ] Peak HBM (`run_memory_benchmark.py`) has not been measured for
-   `PALLAS_CENTERED` at all — add before promoting to default, since a
-   memory regression would not show up in a speed-only benchmark.
-5. [ ] Only after 1-4 pass: flip `KAGGLE_SMALL/MEDIUM/LARGE` to
-   `use_centering=True`, lift `NotImplementedError` in
-   `KernelConfig.__post_init__`, publish real numbers (not the isolated
-   kernel table above) in `README.md`/`CHANGELOG.md`.
-
-**Do not** update `KNOWN_LIMITATIONS.md` sections 1/2 to "RESOLVED" or
-change the `KAGGLE_*` preset defaults until item 5 above.
+**Do not** add a `use_centering` (or similarly named) field to
+`KernelConfig`, add branches to `_kernel_a_body`/`_kernel_b4_body`, or
+reference this hypothesis as an existing/gated/tested code path in
+`README.md`, `CHANGELOG.md`, or `KNOWN_LIMITATIONS.md` until steps 1-6
+above have actually been done. Until then this section is the only place
+in the repo where this idea should be mentioned.
 
 ---
 
@@ -85,11 +99,12 @@ the sequential, data-dependent recursive block-forward-substitution in
 them), which has no parallelism to expose to the MXU regardless of block
 size.
 
-**Why this now matters more:** once `use_centering=True` clears the
-gating criteria above, Kernel B becomes the dominant forward cost by a
-wide margin (an estimated ~51ms of ~59.6ms forward, i.e. ~86%, based on
-isolated kernel-level extrapolation — itself subject to the same
-"not yet e2e-validated" caveat as everything else in this document).
+**Why this could matter later:** *if* the post-beta `use_centering`
+hypothesis above is ever implemented and validated, Kernel B would likely
+become the dominant forward cost by a wide margin (an estimated ~51ms of
+~59.6ms forward, i.e. ~86%, extrapolated from today's isolated Kernel
+A/B4 VPU-vs-MXU numbers) -- itself unconfirmed and entirely contingent on
+that hypothesis being pursued at all (see the section above).
 
 **Candidate directions (none investigated yet):**
 - Alternative block-triangular-solve factorization that exposes more
@@ -116,5 +131,5 @@ milestone with a date.
   backward improvement, measured end-to-end and published in
   `benchmarks/raw/`.
 
-(Nothing from the `use_centering=True` work appears in this section
-until the gating criteria above are met.)
+(Nothing from the `use_centering` hypothesis appears in this section --
+see the hypothesis note above; no code for it exists yet.)

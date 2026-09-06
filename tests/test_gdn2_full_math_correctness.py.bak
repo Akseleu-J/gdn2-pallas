@@ -202,6 +202,21 @@ def test_kernel_a_scores_cpu_interpret(cfg):
     _check("kernel_a.Aqk_causal_incl_diag", float(jnp.max(jnp.abs(upper_aqk_strict))), 1e-6)
 
 
+def test_kernel_a_use_centering_matches_default(cfg):
+    print("\n--- Section 4b: Kernel A use_centering=True vs False (CPU) ---")
+    bt = 64  # small chunk keeps decay well inside the +-20 clip window
+    config_off = KernelConfig(bt=bt, bc=bt // 2, mb=min(16, bt // 2), use_centering=False)
+    config_on = KernelConfig(bt=bt, bc=bt // 2, mb=min(16, bt // 2), use_centering=True)
+    key = jax.random.PRNGKey(654)
+    q, k, v, w, b, g, _ = _make_inputs(key, cfg["bsz"], 1, bt, cfg["H"], cfg["D"], decay_scale=0.02)
+
+    Aqk_off, Akk_off = build_chunk_scores_pallas(q, k, b, g, scale=1.0, config=config_off, interpret=True)
+    Aqk_on, Akk_on = build_chunk_scores_pallas(q, k, b, g, scale=1.0, config=config_on, interpret=True)
+
+    _check("kernel_a.centering_equiv.Aqk", _rel_err(Aqk_on, Aqk_off), 5e-3)
+    _check("kernel_a.centering_equiv.Akk", _rel_err(Akk_on, Akk_off), 5e-3)
+
+
 # ==========================================================================
 # Section 5: Kernel B4 (intra_backward_pallas, interpret=True) -- the
 # ==========================================================================
@@ -272,6 +287,7 @@ def test_all_sections(cfg):
     test_chunked_wy_single_chunk_equals_full_seq(cfg)
     test_wy_inverse_damping_solves_damped_system(cfg)
     test_kernel_a_scores_cpu_interpret(cfg)
+    test_kernel_a_use_centering_matches_default(cfg)
     test_kernel_b4_intra_backward_cpu_interpret(cfg)
     test_reference_bf16_inputs_finite(cfg)
     assert not _FAILURES, f"{len(_FAILURES)} failure(s): {_FAILURES}"
@@ -289,6 +305,7 @@ def main(cfg=RUN_CONFIG):
     test_chunked_wy_single_chunk_equals_full_seq(cfg)
     test_wy_inverse_damping_solves_damped_system(cfg)
     test_kernel_a_scores_cpu_interpret(cfg)
+    test_kernel_a_use_centering_matches_default(cfg)
     test_kernel_b4_intra_backward_cpu_interpret(cfg)
     test_reference_bf16_inputs_finite(cfg)
 

@@ -201,10 +201,9 @@ is inference-only, use `gdn2_forward` / `gdn2_chunked_wy_reference` until the hy
 `JAX forward + Pallas backward` mode lands (planned for v0.3.0).
 - `seq_len` must be divisible by `config.bt` (256 by default, 128 for `KAGGLE_SMALL`).
 - `KernelConfig.bt` must equal `2 * config.bc`; vary `mb` for solver granularity.
-- The pairwise decay computation (Kernel A / B4) currently uses a VPU-bound broadcast-reduce
-pattern rather than an MXU matmul. An MXU-factorized alternative has been sketched as a
-post-beta hypothesis but is not implemented in this release; see
-[`ROADMAP.md`](ROADMAP.md) and [`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md).
+- `use_centering=True` is intentionally disabled: the B4 backward kernel does not propagate
+gradients through the shared centering reference point, so the public config refuses to
+construct it (see [`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md)).
 
 ## Debugging
 
