@@ -47,8 +47,7 @@ pip install git+https://github.com/Akseleu-J/gdn2-pallas.git
 # development
 git clone https://github.com/Akseleu-J/gdn2-pallas.git
 cd gdn2-pallas
-pip install -e ".[dev]"
-pre-commit install
+pip install jax==0.11.1 jaxlib==0.11.1 libtpu==0.0.46 flax==0.12.9 optax==0.2.4
 ```
 
 Requires Python ≥ 3.10 and `jax>=0.4.20`. For TPU, install the matching `jaxlib`/`libtpu`
