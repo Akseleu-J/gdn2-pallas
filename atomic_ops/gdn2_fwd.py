@@ -35,7 +35,7 @@ def _weighted_pair_sum(a_i, edecay, b_j):
 
 
 def _kernel_a_body(q_ref, k_ref, b_ref, g_ref, aqk_ref, akk_ref, *, scale: float, bt: int, bc: int,
-                    n_sub: int, use_centering: bool, config: KernelConfig):
+                    n_sub: int, config: KernelConfig):
     q_full = q_ref[0, 0, 0].astype(jnp.float32)
     k_full = k_ref[0, 0, 0].astype(jnp.float32)
     b_full = b_ref[0, 0, 0].astype(jnp.float32)
@@ -47,10 +47,6 @@ def _kernel_a_body(q_ref, k_ref, b_ref, g_ref, aqk_ref, akk_ref, *, scale: float
 
     aqk_ref[0, 0, 0] = jnp.zeros((bt, bt), dtype=jnp.float32)
     akk_ref[0, 0, 0] = jnp.zeros((bt, bt), dtype=jnp.float32)
-
-    if use_centering:
-        n_mid = bt // 2
-        gn = gc[n_mid]   # (D,), shared reference point for the whole BT chunk
 
     for si in range(n_sub):
         for sj in range(si + 1):
@@ -64,22 +60,11 @@ def _kernel_a_body(q_ref, k_ref, b_ref, g_ref, aqk_ref, akk_ref, *, scale: float
             gc_i = gc[i0:i1]
             gc_j = gc[j0:j1]
 
-            if use_centering:
-                gq_i = jnp.clip(gc_i - gn[None, :], -20.0, 20.0)
-                gk_j = jnp.clip(gn[None, :] - gc_j, -20.0, 20.0)
-                eq_i = jnp.exp(gq_i)
-                ek_j = jnp.exp(gk_j)
-                q_scaled = q_i * eq_i
-                k_scaled = k_j * ek_j
-                bk_scaled = (b_i * k_i) * eq_i
-                aqk_blk = scale * jnp.dot(q_scaled, k_scaled.T, precision=_HIGHEST)
-                akk_blk = jnp.dot(bk_scaled, k_scaled.T, precision=_HIGHEST)
-            else:
-                decay_diff = gc_i[:, None, :] - gc_j[None, :, :]
-                edecay = jnp.exp(jnp.clip(decay_diff, -20.0, 20.0))
-                aqk_blk = scale * _weighted_pair_sum(q_i, edecay, k_j)
-                bk_i = b_i * k_i
-                akk_blk = _weighted_pair_sum(bk_i, edecay, k_j)
+            decay_diff = gc_i[:, None, :] - gc_j[None, :, :]
+            edecay = jnp.exp(jnp.clip(decay_diff, -20.0, 20.0))
+            aqk_blk = scale * _weighted_pair_sum(q_i, edecay, k_j)
+            bk_i = b_i * k_i
+            akk_blk = _weighted_pair_sum(bk_i, edecay, k_j)
 
             if si == sj:
                 idx = jnp.arange(bc)
@@ -106,7 +91,7 @@ def build_chunk_scores_pallas(q, k, b, g, scale, config: KernelConfig = DEFAULT_
     aqk, akk = pl.pallas_call(
         lambda *refs: _kernel_a_body(
             *refs, scale=scale, bt=config.bt, bc=config.bc, n_sub=config.n_sub,
-            use_centering=config.use_centering, config=config,
+            config=config,
         ),
         grid=grid,
         in_specs=[in_spec, in_spec, in_spec, in_spec],

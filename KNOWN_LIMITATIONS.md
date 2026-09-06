@@ -5,48 +5,12 @@ release. Each item includes the reason, current evidence, and the
 recommended workaround. Items marked [planned] have a targeted fix in a
 future release.
 
-## 1. `use_centering=True` is refused by `KernelConfig`
+## 1. Pairwise decay computation is VPU-bound, not MXU-bound
 
-**Status:** intentionally disabled -- and, as of the v0.1.5 investigation
-below, now understood to be a likely *performance* fix, not just an
-alternative numerical path.
+Kernel A (`build_chunk_scores_pallas`) and its backward counterpart B4 (`intra_backward_pallas`) compute the pairwise decay-weighted product via explicit broadcast + elementwise multiply + manual reduction (`_weighted_pair_sum` / `_dL_pair_sum` / `_dR_pair_sum` / `_dgc_pair_sum`), which runs on the VPU rather than the MXU. This is the current, shipped implementation and is not user-configurable.
 
-**Reason:** the B4 backward kernel (`_kernel_b4_body`) does not propagate
-the gradient contribution through the shared centering reference point
-`gn` into `dgc`. Constructing a config with `use_centering=True` raises
-`NotImplementedError` from `KernelConfig.__post_init__` so that no one can
-accidentally train through it via `gdn2_pallas_forward_trainable`.
+An MXU-factorized alternative has been explored as an isolated, off-by-default experiment and shows a large speedup in isolation, but has not been validated end-to-end and is not present in this codebase's kernels. See `ROADMAP.md` for the investigation, its current status, and the gates required before any such change would ship.
 
-**New finding (v0.1.5 kernel-gap diagnostic, see section 6):** Kernel A
-(forward scores) and B4 (its backward counterpart) are the two most
-expensive stages in the entire fused pipeline -- together they account for
-~47.6 ms of a 102 ms forward and ~62 ms of a 72.7 ms backward (TPU v5e-8,
-KAGGLE_MEDIUM, B=8 L=4096). Both use `_weighted_pair_sum` /
-`_dL_pair_sum`/`_dR_pair_sum`/`_dgc_pair_sum`, which compute the
-`(bc,bc,D)` decay-weighted pairwise product via explicit broadcast +
-elementwise multiply + manual reduction -- i.e. VPU-bound, not MXU-bound.
-The `use_centering=True` path already exists in the codebase and factors
-the same computation into two real `jnp.dot` calls (`q_scaled @
-k_scaled.T`), which should route through the MXU instead. Forward-only
-correctness of this factorization is already covered by
-`test_kernel_a_use_centering_matches_default`; only the backward gradient
-through `gn` is missing.
-
-**Workaround (current):** forward-only consumers may call the underlying
-forward kernels (`build_chunk_scores_pallas`) directly with an unfrozen
-`dataclasses.replace(DEFAULT_CONFIG, use_centering=True)` config, and take
-responsibility for not differentiating through it.
-
-**[planned, v0.2.0]** Complete the `dgn` gradient path in `_kernel_b4_body`
-(the accumulator `dgn_acc` already exists in the code and is computed
-correctly per micro-block, but is currently discarded instead of being
-folded back into `dgc` at index `n_mid`). Once verified against
-finite-difference and the existing `test_kernel_a_use_centering_matches_default`-style
-cross-check, lift the `NotImplementedError` gate and re-benchmark Kernel
-A/B4 with `use_centering=True` on TPU. If the MXU-routing hypothesis holds,
-this is expected to close most of the forward gap against JAX_REF
-directly in the Pallas path, which would make the v0.1.5 hybrid
-unnecessary as a *permanent* solution (see section 5).
 
 ## 2. Fused forward is slower than the pure-JAX WY forward
 

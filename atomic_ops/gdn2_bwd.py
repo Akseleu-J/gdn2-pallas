@@ -234,7 +234,7 @@ def _dgc_pair_sum(dM, edecay, L, R, clipmask):
 
 def _kernel_b4_body(q_ref, k_ref, b_ref, g_ref, daqk_ref, dakk_ref,
                      dq_ref, dk_ref, db_ref, dgc_ref, *, scale: float, bt: int, bc: int, n_sub: int,
-                     use_centering: bool, config: KernelConfig):
+                     config: KernelConfig):
     q_full = q_ref[0, 0, 0].astype(jnp.float32)
     k_full = k_ref[0, 0, 0].astype(jnp.float32)
     b_full = b_ref[0, 0, 0].astype(jnp.float32)
@@ -378,7 +378,7 @@ def intra_backward_pallas(dAqk, dAkk, q, k, b, g, scale, config: KernelConfig = 
     dq, dk, db, dgc = pl.pallas_call(
         lambda *refs: _kernel_b4_body(
             *refs, scale=scale, bt=config.bt, bc=config.bc, n_sub=config.n_sub,
-            use_centering=config.use_centering, config=config,
+            config=config,
         ),
         grid=grid,
         in_specs=[io_spec, io_spec, io_spec, io_spec, score_spec, score_spec],
