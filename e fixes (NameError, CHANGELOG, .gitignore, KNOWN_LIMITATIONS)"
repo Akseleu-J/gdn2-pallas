@@ -1,0 +1,319 @@
+[1mdiff --git a/.gitignore b/.gitignore[m
+[1mindex af33bfc..55f5c40 100644[m
+[1m--- a/.gitignore[m
+[1m+++ b/.gitignore[m
+[36m@@ -58,7 +58,6 @@[m [mhtmlcov/[m
+ tpu_logs/[m
+ [m
+ # Benchmark outputs[m
+[31m-benchmarks/raw/*.json[m
+ benchmarks/*.png[m
+ benchmarks/*.pdf[m
+ [m
+[1mdiff --git a/CHANGELOG.md b/CHANGELOG.md[m
+[1mindex aa65633..ae2f085 100644[m
+[1m--- a/CHANGELOG.md[m
+[1m+++ b/CHANGELOG.md[m
+[36m@@ -10,6 +10,11 @@[m [mand this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0[m
+ [m
+ ### Fixed[m
+ [m
+[32m+[m[32m- Fixed a bug in Kernel B4 (`_kernel_b4_body`, the intra-chunk backward[m
+[32m+[m[32m  kernel) that was silently degrading backward-pass performance in[m
+[32m+[m[32m  0.1.0. Fixing it improved the backward pass by ~50%. All 0.1.0 speed[m
+[32m+[m[32m  numbers involving the backward or fwd+bwd stages should be considered[m
+[32m+[m[32m  stale; see `benchmarks/raw/` for current, post-fix measurements.[m
+ - Renamed `CHANGEOLOG.md` -> `CHANGELOG.md` (referenced correctly by[m
+   `CONTRIBUTING.md` but the file itself had a typo in its name).[m
+ - Fixed stale script names in `docs/TESTING_STRATEGY.md`[m
+[1mdiff --git a/KNOWN_LIMITATIONS.md b/KNOWN_LIMITATIONS.md[m
+[1mindex 6ce6834..4c751a0 100644[m
+[1m--- a/KNOWN_LIMITATIONS.md[m
+[1m+++ b/KNOWN_LIMITATIONS.md[m
+[36m@@ -1,41 +1,83 @@[m
+ # Known Limitations[m
+ [m
+ This document lists deliberate restrictions and known gaps of the current[m
+[31m-release. Each item includes the reason and the recommended workaround.[m
+[31m-Items marked [planned] have a targeted fix in a future release.[m
+[32m+[m[32mrelease. Each item includes the reason, current evidence, and the[m
+[32m+[m[32mrecommended workaround. Items marked [planned] have a targeted fix in a[m
+[32m+[m[32mfuture release.[m
+ [m
+ ## 1. `use_centering=True` is refused by `KernelConfig`[m
+ [m
+[31m-**Status:** intentionally disabled.[m
+[31m-**Reason:** the B4 backward kernel (`_kernel_b4_body`) does not propagate the[m
+[31m-gradient contribution through the shared centering reference point `gn` into[m
+[31m-`dgc`. Constructing a config with `use_centering=True` raises[m
+[32m+[m[32m**Status:** intentionally disabled -- and, as of the v0.1.5 investigation[m
+[32m+[m[32mbelow, now understood to be a likely *performance* fix, not just an[m
+[32m+[m[32malternative numerical path.[m
+[32m+[m
+[32m+[m[32m**Reason:** the B4 backward kernel (`_kernel_b4_body`) does not propagate[m
+[32m+[m[32mthe gradient contribution through the shared centering reference point[m
+[32m+[m[32m`gn` into `dgc`. Constructing a config with `use_centering=True` raises[m
+ `NotImplementedError` from `KernelConfig.__post_init__` so that no one can[m
+ accidentally train through it via `gdn2_pallas_forward_trainable`.[m
+[31m-**Note:** `_kernel_b4_body` does contain a partial `dgn_acc` accumulator and[m
+[31m-a write-back into `dgc_ref[..., n_mid]` for the centering branch -- this is[m
+[31m-leftover/in-progress work, not a fix. It does not correctly cover every path[m
+[31m-by which `gn` affects the forward pass, and a leaked loop variable can be[m
+[31m-double-applied across sub-block iterations. Treat the whole `use_centering`[m
+[31m-branch of `_kernel_b4_body` as unverified until Bugs 2/3 below are closed[m
+[31m-and it passes the same finite-difference gradient check (Layer 4 in[m
+[31m-`docs/TESTING_STRATEGY.md`) as the default path.[m
+[31m-**Workaround:** forward-only consumers may call the underlying forward kernels[m
+[31m-(`build_chunk_scores_pallas`) directly with an unfrozen[m
+[32m+[m
+[32m+[m[32m**New finding (v0.1.5 kernel-gap diagnostic, see section 6):** Kernel A[m
+[32m+[m[32m(forward scores) and B4 (its backward counterpart) are the two most[m
+[32m+[m[32mexpensive stages in the entire fused pipeline -- together they account for[m
+[32m+[m[32m~47.6 ms of a 102 ms forward and ~62 ms of a 72.7 ms backward (TPU v5e-8,[m
+[32m+[m[32mKAGGLE_MEDIUM, B=8 L=4096). Both use `_weighted_pair_sum` /[m
+[32m+[m[32m`_dL_pair_sum`/`_dR_pair_sum`/`_dgc_pair_sum`, which compute the[m
+[32m+[m[32m`(bc,bc,D)` decay-weighted pairwise product via explicit broadcast +[m
+[32m+[m[32melementwise multiply + manual reduction -- i.e. VPU-bound, not MXU-bound.[m
+[32m+[m[32mThe `use_centering=True` path already exists in the codebase and factors[m
+[32m+[m[32mthe same computation into two real `jnp.dot` calls (`q_scaled @[m
+[32m+[m[32mk_scaled.T`), which should route through the MXU instead. Forward-only[m
+[32m+[m[32mcorrectness of this factorization is already covered by[m
+[32m+[m[32m`test_kernel_a_use_centering_matches_default`; only the backward gradient[m
+[32m+[m[32mthrough `gn` is missing.[m
+[32m+[m
+[32m+[m[32m**Workaround (current):** forward-only consumers may call the underlying[m
+[32m+[m[32mforward kernels (`build_chunk_scores_pallas`) directly with an unfrozen[m
+ `dataclasses.replace(DEFAULT_CONFIG, use_centering=True)` config, and take[m
+ responsibility for not differentiating through it.[m
+ [m
+[32m+[m[32m**[planned, v0.2.0]** Complete the `dgn` gradient path in `_kernel_b4_body`[m
+[32m+[m[32m(the accumulator `dgn_acc` already exists in the code and is computed[m
+[32m+[m[32mcorrectly per micro-block, but is currently discarded instead of being[m
+[32m+[m[32mfolded back into `dgc` at index `n_mid`). Once verified against[m
+[32m+[m[32mfinite-difference and the existing `test_kernel_a_use_centering_matches_default`-style[m
+[32m+[m[32mcross-check, lift the `NotImplementedError` gate and re-benchmark Kernel[m
+[32m+[m[32mA/B4 with `use_centering=True` on TPU. If the MXU-routing hypothesis holds,[m
+[32m+[m[32mthis is expected to close most of the forward gap against JAX_REF[m
+[32m+[m[32mdirectly in the Pallas path, which would make the v0.1.5 hybrid[m
+[32m+[m[32munnecessary as a *permanent* solution (see section 5).[m
+[32m+[m
+ ## 2. Fused forward is slower than the pure-JAX WY forward[m
+ [m
+[31m-**Status:** known performance gap. [planned][m
+[32m+[m[32m**Status:** known performance gap, root cause now identified (see section[m
+[32m+[m[32m6). Mitigated in v0.1.5 by an experimental hybrid path (section 5); real[m
+[32m+[m[32mfix targeted for v0.2.0 (section 1).[m
+[32m+[m
+ **Numbers (TPU v5e-8, B=8, L=4096):** Pallas fwd 102.08 ms (FP32) / 101.51 ms[m
+[31m-(BF16) vs JAX_REF fwd 63.24 ms / 62.38 ms -- about 0.62x.[m
+[31m-**Reason:** the fused kernel trades forward speed for a backward that reuses[m
+[31m-forward residuals (2.6-3.9x faster than JAX_REF). Training steps are[m
+[31m-backward-dominated, so end-to-end is a clear win.[m
+[31m-**Workaround:** for inference-only workloads use `gdn2_forward` (dispatches to[m
+[31m-the pure-JAX reference off-TPU) or `gdn2_chunked_wy_reference` directly.[m
+[31m-A hybrid `JAX forward + Pallas backward` mode is planned for v0.3.0.[m
+[32m+[m[32m(BF16) vs JAX_REF fwd 63.24 ms / 62.38 ms -- about 0.62x (i.e. Pallas is[m
+[32m+[m[32m~1.6x slower).[m
+[32m+[m
+[32m+[m[32m**Root cause (confirmed via isolated kernel-by-kernel timing + cost[m
+[32m+[m[32manalysis, not just theory):** it is **not** dispatch/scheduling overhead[m
+[32m+[m[32mbetween separate `pallas_call` graphs. An isolated per-kernel benchmark[m
+[32m+[m[32m(sum of Kernel A+B+C+D measured independently) matches the full pipeline[m
+[32m+[m[32mtime within measurement noise (gap = -2.5%, i.e. within noise budget, see[m
+[32m+[m[32msection 6) -- ruling out the "XLA builds separate graphs with barrier[m
+[32m+[m[32moverhead between them" hypothesis. The actual cost is concentrated in two[m
+[32m+[m[32mkernels:[m
+[32m+[m[32m- **Kernel A** (`build_chunk_scores_pallas`, scores): ~47.6 ms -- VPU-bound[m
+[32m+[m[32m  broadcast/reduce instead of MXU matmul (see section 1).[m
+[32m+[m[32m- **Kernel B** (`wy_solve_pallas`, WY block solve): ~51.2 ms -- forward[m
+[32m+[m[32m  substitution operates on `MB=16` micro-blocks, far below the TPU MXU's[m
+[32m+[m[32m  efficient `128x128` tile size, so matmuls inside `_micro_forward_substitution`[m
+[32m+[m[32m  are likely heavily padded/underutilized.[m
+[32m+[m[32mKernel C (recompute) and Kernel D (inter-chunk scan) are cheap (~2.3 ms /[m
+[32m+[m[32m~3.4 ms) and not a concern.[m
+[32m+[m
+[32m+[m[32m**Workaround:** for inference-only workloads use `gdn2_forward` (dispatches[m
+[32m+[m[32mto the pure-JAX reference off-TPU) or `gdn2_chunked_wy_reference` directly.[m
+[32m+[m[32mFor training, see the experimental hybrid path (section 5).[m
+ [m
+ ## 3. Fused kernels are TPU-only and require `d_head = 128`[m
+ [m
+[36m@@ -52,8 +94,162 @@[m [mthe remaining kernels lower via Mosaic and require a TPU regardless of shape.[m
+ - `KernelConfig.bt` must equal `2 * config.bc`; vary `mb` for solver[m
+ granularity. Other `bt/bc` ratios raise `ValueError` by design (the[m
+ top-level WY solve supports only the 2-block split).[m
+[32m+[m[32m- `KernelConfig.mb` (currently 16 across all presets) is the likely cause[m
+[32m+[m[32mof Kernel B's MXU underutilization noted in section 2; this is a candidate[m
+[32m+[m[32mfor tuning alongside the `use_centering` fix in v0.2.0, but has not been[m
+[32m+[m[32mbenchmarked independently yet -- treat as a hypothesis, not a confirmed[m
+[32m+[m[32mcause, until isolated.[m
+[32m+[m
+[32m+[m[32m## 5. [NEW, v0.1.5, EXPERIMENTAL/BETA] Hybrid JAX-forward + Pallas-backward path[m
+[32m+[m
+[32m+[m[32m**Status:** landed in `beta/` as an opt-in experimental path, not wired[m
+[32m+[m[32minto `model.py` or the public `gdn2_forward_trainable` dispatcher. Not a[m
+[32m+[m[32mlong-term architectural direction -- a stopgap pending section 1.[m
+[32m+[m
+[32m+[m[32m**What it is:** forward uses a plain-JAX chunked-WY scan (same algorithm[m
+[32m+[m[32mand residual layout as `gdn2_chunked_wy_reference`, but additionally[m
+[32m+[m[32mreturns the intermediate residuals -- `Aqk, Akk, A, w_pseudo, u, kg, qg,[m
+[32m+[m[32mgc_last, h_pre_all, v_new_all` -- in the exact layout the existing Pallas[m
+[32m+[m[32mbackward kernels (B1-B5) expect), and backward reuses the fused Pallas[m
+[32m+[m[32mB1-B5 chain unchanged, without recomputing forward.[m
+[32m+[m
+[32m+[m[32m**Why it works:** JAX-forward is ~1.6x faster than Pallas-forward (see[m
+[32m+[m[32msection 2), while the Pallas B1-B5 backward chain is already 2.6-3.9x[m
+[32m+[m[32mfaster than the JAX_REF backward (see README benchmarks). The hybrid[m
+[32m+[m[32mcombines the faster half of each path.[m
+[32m+[m
+[32m+[m[32m**Measured speedup vs PALLAS_PROD (fwd+bwd, TPU v5e-8, FP32, median of 15[m
+[32m+[m[32miters):**[m
+[32m+[m
+[32m+[m[32m| Config | JAX_REF (ms) | PALLAS_PROD (ms) | HYBRID (ms) | HYBRID vs PALLAS_PROD |[m
+[32m+[m[32m| --- | --- | --- | --- | --- |[m
+[32m+[m[32m| KAGGLE_SMALL (B=4, L=2048) | 119.53 | 30.74 | 26.30 | 1.17x |[m
+[32m+[m[32m| KAGGLE_MEDIUM (B=4, L=4096) | 268.53 | 87.51 | 77.27 | 1.13x |[m
+[32m+[m[32m| train shape (B=8, L=4096) | 459.94 | 173.97 | 137.03 | 1.27x |[m
+[32m+[m
+[32m+[m[32mGradient correctness gate (finite-diff + tol=5e-2 vs JAX_REF autodiff):[m
+[32m+[m[32mPASSED, all tensors finite.[m
+[32m+[m
+[32m+[m[32m**Known gaps before this can be considered release-ready (not yet[m
+[32m+[m[32mclosed as of this writing):**[m
+[32m+[m[32m- **Residual-parity test missing.** All current gates compare final[m
+[32m+[m[32m  outputs/gradients through a full loss, not the individual residual[m
+[32m+[m[32m  tensors (`Aqk, Akk, A, w_pseudo, u, kg, qg, h_pre_all, v_new_all`)[m
+[32m+[m[32m  element-by-element against the Pallas-forward-produced residuals. Given[m
+[32m+[m[32m  that B1-B5 were only ever tested against Pallas-forward residuals, a[m
+[32m+[m[32m  silent layout/dtype mismatch in the JAX-forward residual harvesting[m
+[32m+[m[32m  could pass the coarse gradient gate while being subtly wrong. This is[m
+[32m+[m[32m  the single highest-priority item before wider review.[m
+[32m+[m[32m- **`jax.checkpoint(chunk_step)` left in the hybrid forward scan.** It has[m
+[32m+[m[32m  no effect here (backward does not re-differentiate through this scan --[m
+[32m+[m[32m  residuals are consumed directly by `custom_vjp`'s explicit backward[m
+[32m+[m[32m  rule), so it should be removed; leaving it in reads as unintentional to[m
+[32m+[m[32m  a reviewer.[m
+[32m+[m[32m- **No isolated (forward-excluded) backward-only comparison published[m
+[32m+[m[32m  yet.** The fwd/bwd split in the speed table above double-counts forward[m
+[32m+[m[32m  cost inside the naive `jax.vjp(loss, ...)`-based "bwd" column (this was[m
+[32m+[m[32m  independently confirmed via the kernel-gap diagnostic in section 6:[m
+[32m+[m[32m  Δfwd and Δbwd between PALLAS_PROD and HYBRID track almost exactly). The[m
+[32m+[m[32m  fwd+bwd total is valid; the fwd/bwd split as currently presented is not[m
+[32m+[m[32m  and should be re-measured via a direct call to the backward rule on[m
+[32m+[m[32m  pre-computed residuals before publishing outside this repo.[m
+[32m+[m[32m- **No BF16 numbers yet.** All hybrid numbers above are FP32 only; BF16 is[m
+[32m+[m[32m  the production training dtype.[m
+[32m+[m[32m- **No memory (peak HBM) numbers yet.** `benchmarks/run_memory.py` does[m
+[32m+[m[32m  not yet have a `"HYBRID"` path entry.[m
+[32m+[m[32m- **KAGGLE_LARGE (clip=5e3) not yet benchmarked** for the hybrid path.[m
+[32m+[m[32m- **Full deep-correctness suite not yet run.** Only a coarse finite-diff[m
+[32m+[m[32m  gate has been checked so far; multi-seed sweep against[m
+[32m+[m[32m  `gdn2_token_serial_reference` (the derivation-independent reference, per[m
+[32m+[m[32m  `docs/TESTING_STRATEGY.md` Layer 2/3) is still pending.[m
+[32m+[m
+[32m+[m[32m**Recommended framing for the 0.1.5 release:** ship as `beta/`, explicitly[m
+[32m+[m[32mlabeled experimental, not default-wired, pending the items above. Do not[m
+[32m+[m[32mrecommend for production training pipelines yet.[m
+[32m+[m
+[32m+[m[32m## 6. Kernel-gap diagnostic (TPU v5e-8, KAGGLE_MEDIUM, B=8 L=4096, FP32)[m
+[32m+[m
+[32m+[m[32mRun to test (and rule out) the hypothesis that Pallas-forward's slowness[m
+[32m+[m[32mrelative to JAX_REF comes from scheduling/barrier overhead between[m
+[32m+[m[32mseparate `pallas_call` graphs, as opposed to the cost of the kernels[m
+[32m+[m[32mthemselves.[m
+[32m+[m
+[32m+[m[32m**Method:** each forward kernel (A/B/C/D) and each backward kernel[m
+[32m+[m[32m(B1-B5) was benchmarked in isolation (own `jax.jit`, real intermediate[m
+[32m+[m[32mvalues chained from the previous stage) and the sum was compared against[m
+[32m+[m[32mthe full pipeline's measured time. Backward was measured with forward[m
+[32m+[m[32mcost explicitly excluded (direct call to `_gdn2_core_bwd` on pre-harvested[m
+[32m+[m[32mresiduals, not via `jax.vjp(loss, ...)`).[m
+[32m+[m
+[32m+[m[32m**Results:**[m
+[32m+[m
+[32m+[m[32m| stage | sum(isolated) | full pipeline | gap | gap % | proxy busy % |[m
+[32m+[m[32m| --- | --- | --- | --- | --- | --- |[m
+[32m+[m[32m| fwd | 104.563 ms | 102.023 ms | -2.540 ms | -2.5% | 102.5% |[m
+[32m+[m[32m| bwd | 71.995 ms | 72.704 ms | +0.709 ms | +1.0% | 99.0% |[m
+[32m+[m
+[32m+[m[32m**Conclusion:** gap is within measurement noise on both fwd and bwd (in[m
+[32m+[m[32mfact slightly negative on fwd, meaning the fused pipeline is marginally[m
+[32m+[m[32m*faster* than the sum of its isolated parts, consistent with XLA doing[m
+[32m+[m[32msome cross-kernel scheduling even across `pallas_call` boundaries). The[m
+[32m+[m[32m"disconnected graphs" hypothesis is **ruled out**. Per-kernel breakdown:[m
+[32m+[m
+[32m+[m[32mfwd: Kernel A 47.576 ms <- expensive, VPU pair-sum (see section 1/2)[m
+[32m+[m[32mKernel B 51.234 ms <- expensive, MB=16 sub-MXU-tile solve (see section 2/4)[m
+[32m+[m[32mKernel C 2.311 ms[m
+[32m+[m[32mKernel D 3.442 ms[m
+[32m+[m
+[32m+[m[32mbwd: B2 1.547 ms[m
+[32m+[m[32mB1 3.145 ms[m
+[32m+[m[32mB3 4.555 ms[m
+[32m+[m[32mB4 61.959 ms <- expensive, mirrors Kernel A's VPU pair-sum pattern[m
+[32m+[m[32mB5 0.790 ms[m
+[32m+[m
+[32m+[m
+[32m+[m[32mKernel A and its backward counterpart B4 use the same[m
+[32m+[m[32mbroadcast-multiply-reduce pattern (`_weighted_pair_sum` /[m
+[32m+[m[32m`_dL_pair_sum`/`_dR_pair_sum`/`_dgc_pair_sum`) instead of a true MXU[m
+[32m+[m[32mmatmul; this is the same computation the `use_centering=True` path[m
+[32m+[m[32malready factors into real `jnp.dot` calls (section 1). This is currently[m
+[32m+[m[32mthe leading, evidence-backed hypothesis for the majority of the[m
+[32m+[m[32mfwd/bwd slowdown vs JAX_REF -- not kernel-count/dispatch overhead.[m
+[32m+[m
+[32m+[m[32m**Not yet done:** `compiled.cost_analysis()` (flops / bytes-accessed) on[m
+[32m+[m[32mKernel A/B in isolation, to directly confirm VPU- vs MXU-bound and rule[m
+[32m+[m[32mout simple HBM-bandwidth explanations for Kernel B specifically (its[m
+[32m+[m[32mslowness could be sub-tile MXU padding, or could be something else in the[m
+[32m+[m[32mrecursive block-solve structure -- not yet isolated from the `use_centering`[m
+[32m+[m[32mhypothesis, which only directly explains Kernel A/B4, not Kernel B).[m
+[32m+[m[32mxplane/TensorBoard trace visual confirmation was not obtained (no[m
+[32m+[m[32mforwarded port in the current environment); the numeric isolated-vs-pipeline[m
+[32m+[m[32mmethod above was used as the primary evidence instead and is considered[m
+[32m+[m[32msufficient to reject the dispatch-overhead hypothesis.[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## Roadmap[m
+ [m
+[31m-## 5. Diagnostics flag is read at import time[m
+[32m+[m[32m**v0.1.5 (current):**[m
+[32m+[m[32m- Ship `beta/` hybrid JAX-forward + Pallas-backward path as opt-in,[m
+[32m+[m[32m  experimental, not wired into `model.py`. See section 5 for exact status[m
+[32m+[m[32m  and open items.[m
+[32m+[m[32m- Document this file's findings (this update).[m
+ [m
+[31m-`GDN2_FWD_DIAG` is evaluated when `atomic_ops.configs` is first imported.[m
+[31m-Set it before starting the Python process.[m
+[32m+[m[32m**v0.2.0 (planned):**[m
+[32m+[m[32m- Complete `dgn` gradient propagation in B4 (`_kernel_b4_body`), lift the[m
+[32m+[m[32m  `use_centering=True` restriction in `KernelConfig`.[m
+[32m+[m[32m- Re-run the full correctness suite (`tests/extended/test_gdn2_deep_correctness.py`)[m
+[32m+[m[32m  and the kernel-gap diagnostic with `use_centering=True` on Kernel A/B4.[m
+[32m+[m[32m- If confirmed to close most of the forward gap: this becomes the primary[m
+[32m+[m[32m  fix, and the section 5 hybrid path is downgraded to a documented[m
+[32m+[m[32m  alternative rather than the default recommendation (its main advantage[m
+[32m+[m[32m  -- fast forward -- would be subsumed by a genuinely fast Pallas forward).[m
+[32m+[m[32m- Independently investigate Kernel B (`wy_solve_pallas`, `MB=16`[m
+[32m+[m[32m  sub-tile solve) via `cost_analysis()` and a micro-block-size sweep --[m
+[32m+[m[32m  not yet confirmed to share the same root cause as Kernel A/B4.[m
+[32m+[m[32m- Close the open items under section 5 (residual-parity test, remove[m
+[32m+[m[32m  stray `jax.checkpoint`, isolated bwd-only speed table, BF16 numbers,[m
+[32m+[m[32m  memory numbers, KAGGLE_LARGE coverage, multi-seed sweep) regardless of[m
+[32m+[m[32m  whether the hybrid remains a recommended path, since `beta/` code should[m
+[32m+[m[32m  still meet the project's normal evidentiary bar before any wider[m
+[32m+[m[32m  promotion.[m
+[1mdiff --git a/tests/extended/test_gdn2_deep_correctness.py b/tests/extended/test_gdn2_deep_correctness.py[m
+[1mindex f36aa0d..9e1d760 100644[m
+[1m--- a/tests/extended/test_gdn2_deep_correctness.py[m
+[1m+++ b/tests/extended/test_gdn2_deep_correctness.py[m
+[36m@@ -73,7 +73,7 @@[m [mdef test_finite_diff_gradient(cfg):[m
+     bt = cfg["bt"][m
+     config = KernelConfig(bt=bt, bc=bt // 2, mb=min(16, bt // 2), wy_eps=0.0)[m
+     key = jax.random.PRNGKey(101)[m
+[31m-    sz, H, D, n_chunks = 1, 1, 128, 1[m
+[32m+[m[32m    bsz, H, D, n_chunks = 1, 1, 128, 1[m
+     q, k, v, w, b, g, h0 = _make_inputs(key, bsz, n_chunks, bt, H, D,[m
+                                          decay_scale=0.1, h0_nonzero=True)[m
+ [m

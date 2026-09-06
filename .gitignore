@@ -58,7 +58,6 @@ htmlcov/
 tpu_logs/
 
 # Benchmark outputs
-benchmarks/raw/*.json
 benchmarks/*.png
 benchmarks/*.pdf
 

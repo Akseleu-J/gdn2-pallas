@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed a bug in Kernel B4 (`_kernel_b4_body`, the intra-chunk backward
+  kernel) that was silently degrading backward-pass performance in
+  0.1.0. Fixing it improved the backward pass by ~50%. All 0.1.0 speed
+  numbers involving the backward or fwd+bwd stages should be considered
+  stale; see `benchmarks/raw/` for current, post-fix measurements.
 - Renamed `CHANGEOLOG.md` -> `CHANGELOG.md` (referenced correctly by
   `CONTRIBUTING.md` but the file itself had a typo in its name).
 - Fixed stale script names in `docs/TESTING_STRATEGY.md`

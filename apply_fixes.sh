@@ -1,3 +1,143 @@
+#!/usr/bin/env bash
+# apply_fixes.sh
+# Запускать из корня репозитория gdn2-pallas: bash apply_fixes.sh
+#
+# Фиксит только то, что реально нужно перед публикацией. Не трогает
+# beta/gdn2_hybrid.py и ничего, связанного с гибридным путём -- он
+# намеренно стоит особняком как experimental/opt-in.
+set -euo pipefail
+
+ROOT="$(pwd)"
+echo "== Applying fixes in: $ROOT =="
+
+# ---------------------------------------------------------------------
+# 1. tests/extended/test_gdn2_deep_correctness.py: fix NameError (sz -> bsz)
+#    in test_finite_diff_gradient. Currently `sz` is defined but `bsz` is
+#    used a few lines later -- the test raises NameError before it can
+#    ever run, so Layer 4 (finite-difference gradient check, the
+#    strongest test in the suite per docs/TESTING_STRATEGY.md) is
+#    silently never executed on TPU CI.
+# ---------------------------------------------------------------------
+TEST_FILE="tests/extended/test_gdn2_deep_correctness.py"
+if [ -f "$TEST_FILE" ]; then
+    if grep -q "sz, H, D, n_chunks = 1, 1, 128, 1" "$TEST_FILE"; then
+        python3 - << PY_EOF
+path = "$TEST_FILE"
+with open(path, "r") as f:
+    content = f.read()
+
+old = "    sz, H, D, n_chunks = 1, 1, 128, 1\n"
+new = "    bsz, H, D, n_chunks = 1, 1, 128, 1\n"
+
+if old in content:
+    content = content.replace(old, new)
+    with open(path, "w") as f:
+        f.write(content)
+    print("[1/4] Fixed NameError (sz -> bsz) in test_finite_diff_gradient")
+else:
+    print("[1/4] WARNING: could not find exact 'sz, H, D, n_chunks = 1, 1, 128, 1' "
+          "line in " + path + " -- please patch manually")
+PY_EOF
+    elif grep -q "bsz, H, D, n_chunks = 1, 1, 128, 1" "$TEST_FILE"; then
+        echo "[1/4] $TEST_FILE already fixed (bsz), skipping"
+    else
+        echo "[1/4] WARNING: expected pattern not found in $TEST_FILE -- please check manually"
+    fi
+else
+    echo "[1/4] WARNING: $TEST_FILE not found, skipping"
+fi
+
+# ---------------------------------------------------------------------
+# 2. CHANGELOG.md: document the actual 0.1.1 fix (Kernel B4 bug that
+#    slowed the backward pass in 0.1.0; fixing it improved bwd by ~50%).
+#    This is currently missing -- 0.1.1's entry only lists a filename
+#    rename and doc path fixes, not the real reason the release exists.
+# ---------------------------------------------------------------------
+if [ -f "CHANGELOG.md" ]; then
+    if ! grep -q "Kernel B4" CHANGELOG.md; then
+        python3 - << 'PY_EOF'
+path = "CHANGELOG.md"
+with open(path, "r") as f:
+    content = f.read()
+
+old = '''## [0.1.1] - 2026-09-05
+
+### Fixed
+
+- Renamed `CHANGEOLOG.md` -> `CHANGELOG.md` (referenced correctly by
+  `CONTRIBUTING.md` but the file itself had a typo in its name).
+- Fixed stale script names in `docs/TESTING_STRATEGY.md`
+  (`run_speed.py`/`run_memory.py` -> `run_speed_benchmark.py`/`run_memory_benchmark.py`).'''
+
+new = '''## [0.1.1] - 2026-09-05
+
+### Fixed
+
+- Fixed a bug in Kernel B4 (`_kernel_b4_body`, the intra-chunk backward
+  kernel) that was silently degrading backward-pass performance in
+  0.1.0. Fixing it improved the backward pass by ~50%. All 0.1.0 speed
+  numbers involving the backward or fwd+bwd stages should be considered
+  stale; see `benchmarks/raw/` for current, post-fix measurements.
+- Renamed `CHANGEOLOG.md` -> `CHANGELOG.md` (referenced correctly by
+  `CONTRIBUTING.md` but the file itself had a typo in its name).
+- Fixed stale script names in `docs/TESTING_STRATEGY.md`
+  (`run_speed.py`/`run_memory.py` -> `run_speed_benchmark.py`/`run_memory_benchmark.py`).'''
+
+if old in content:
+    content = content.replace(old, new)
+    with open(path, "w") as f:
+        f.write(content)
+    print("[2/4] Added Kernel B4 fix entry to CHANGELOG.md under 0.1.1")
+else:
+    print("[2/4] WARNING: could not find exact 0.1.1 block in CHANGELOG.md -- please add the Kernel B4 entry manually")
+PY_EOF
+    else
+        echo "[2/4] CHANGELOG.md already documents the Kernel B4 fix, skipping"
+    fi
+else
+    echo "[2/4] WARNING: CHANGELOG.md not found, skipping"
+fi
+
+# ---------------------------------------------------------------------
+# 3. .gitignore: stop ignoring benchmarks/raw/*.json.
+#    These files (benchmark_speed_final_averaged.json,
+#    benchmark_memory_final_averaged.json) are already committed and
+#    linked from README.md / benchmarks/README.md. The current ignore
+#    rule silently contradicts that -- a future regen of these files
+#    could be dropped by git without anyone noticing.
+# ---------------------------------------------------------------------
+if [ -f ".gitignore" ]; then
+    if grep -q "^benchmarks/raw/\*\.json$" .gitignore; then
+        python3 - << 'PY_EOF'
+path = ".gitignore"
+with open(path, "r") as f:
+    lines = f.readlines()
+
+new_lines = [line for line in lines if line.strip() != "benchmarks/raw/*.json"]
+
+with open(path, "w") as f:
+    f.writelines(new_lines)
+print("[3/4] Removed 'benchmarks/raw/*.json' from .gitignore (files are tracked on purpose)")
+PY_EOF
+    else
+        echo "[3/4] .gitignore already does not ignore benchmarks/raw/*.json, skipping"
+    fi
+else
+    echo "[3/4] WARNING: .gitignore not found, skipping"
+fi
+
+# ---------------------------------------------------------------------
+# 4. KNOWN_LIMITATIONS.md: the version currently tracked in the repo is
+#    the OLD one (pre-v0.1.5 investigation) -- it doesn't yet reflect
+#    the Kernel A/B4 diagnostic, the use_centering root-cause finding,
+#    or the roadmap. Replace it with the current v0.1.5 content in full.
+# ---------------------------------------------------------------------
+KL_FILE="KNOWN_LIMITATIONS.md"
+if [ -f "$KL_FILE" ]; then
+    if grep -q "v0.1.5" "$KL_FILE"; then
+        echo "[4/4] $KL_FILE already contains the v0.1.5 content, skipping"
+    else
+        cat > "$KL_FILE" << 'KL_EOF'
 # Known Limitations
 
 This document lists deliberate restrictions and known gaps of the current
@@ -253,3 +393,14 @@ sufficient to reject the dispatch-overhead hypothesis.
   whether the hybrid remains a recommended path, since `beta/` code should
   still meet the project's normal evidentiary bar before any wider
   promotion.
+KL_EOF
+        echo "[4/4] Replaced KNOWN_LIMITATIONS.md with the current v0.1.5 content"
+    fi
+else
+    echo "[4/4] WARNING: $KL_FILE not found, skipping"
+fi
+
+echo ""
+echo "== Done. Review changes with: git diff =="
+echo "== Then run: pytest tests/extended/test_gdn2_deep_correctness.py -v =="
+echo "== And:      ruff check atomic_ops tests benchmarks examples =="

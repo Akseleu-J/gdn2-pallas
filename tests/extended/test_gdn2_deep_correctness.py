@@ -73,7 +73,7 @@ def test_finite_diff_gradient(cfg):
     bt = cfg["bt"]
     config = KernelConfig(bt=bt, bc=bt // 2, mb=min(16, bt // 2), wy_eps=0.0)
     key = jax.random.PRNGKey(101)
-    sz, H, D, n_chunks = 1, 1, 128, 1
+    bsz, H, D, n_chunks = 1, 1, 128, 1
     q, k, v, w, b, g, h0 = _make_inputs(key, bsz, n_chunks, bt, H, D,
                                          decay_scale=0.1, h0_nonzero=True)
 
